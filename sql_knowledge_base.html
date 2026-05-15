@@ -680,6 +680,7 @@ function openFieldsImporter(){
 /* ---------- SQL 资产库 ---------- */
 let sqlFuse = null;
 function rebuildSqlFuse(){
+  if(typeof Fuse==='undefined'){ sqlFuse=null; return; }
   sqlFuse = new Fuse(App.sqls, {
     keys:[{name:'name',weight:2},'sql','description',{name:'tables',weight:1.5},'tags'],
     threshold:0.4, ignoreLocation:true
@@ -687,7 +688,10 @@ function rebuildSqlFuse(){
 }
 function getFilteredSqls(){
   const f=App.filterSql; let arr=App.sqls;
-  if(f.q.trim() && sqlFuse){ arr = sqlFuse.search(f.q.trim()).map(r=>r.item); }
+  if(f.q.trim()){
+    if(sqlFuse){ arr = sqlFuse.search(f.q.trim()).map(r=>r.item); }
+    else{ const q=f.q.trim().toLowerCase(); arr=arr.filter(s=>(s.name||'').toLowerCase().includes(q)||(s.sql||'').toLowerCase().includes(q)||(s.tables||[]).join(' ').toLowerCase().includes(q)); }
+  }
   if(f.type) arr = arr.filter(s=>s.type===f.type);
   if(f.status) arr = arr.filter(s=>s.status===f.status);
   return arr;
@@ -780,7 +784,7 @@ function renderSqlDetail(){
       <div class="code-block"><pre><code class="language-sql">${escapeHtml(s.sql||'')}</code></pre></div>
       <div style="margin-top:10px;color:var(--text-disabled);font-size:11px">创建：${fmtDate(s.createdAt)} · 更新：${fmtDate(s.updatedAt)}</div>
     </div>`;
-  hljs.highlightAll && hljs.highlightAll();
+  typeof hljs!=='undefined' && hljs.highlightAll();
   $('#btn-copy-sql').onclick = ()=>{navigator.clipboard.writeText(s.sql||'');toast('已复制','success');};
   $('#btn-edit-sql').onclick = ()=>openSqlEditor(s);
   $('#btn-del-sql').onclick = async ()=>{
@@ -965,7 +969,7 @@ function renderChatStream(){
   stream.innerHTML = App.chatHistory.length===0
     ? '<div class="empty-state"><div class="ico">🤖</div>勾选上下文后开始提问<br><small>Ctrl/⌘ + Enter 发送</small></div>'
     : App.chatHistory.map((m,i)=>`<div class="msg ${m.role}" data-i="${i}">${m.role==='assistant'?renderMarkdown(m.content):escapeHtml(m.content)}</div>`).join('');
-  hljs.highlightAll && hljs.highlightAll();
+  typeof hljs!=='undefined' && hljs.highlightAll();
   stream.scrollTop = stream.scrollHeight;
 }
 async function sendChat(){
@@ -1123,7 +1127,7 @@ async function aiDeepCheck(issues){
     }});
     const m = out.querySelector('.msg');
     m.innerHTML = renderMarkdown(m.textContent);
-    hljs.highlightAll && hljs.highlightAll();
+    typeof hljs!=='undefined' && hljs.highlightAll();
   }catch(e){ out.innerHTML='<div class="msg assistant">⚠️ '+escapeHtml(e.message)+'</div>'; }
 }
 
@@ -1316,7 +1320,9 @@ function openModal(title, bodyHtml, actions, opts={}){
     await App.loadAll();
     rebuildSqlFuse();
     if(location.protocol!=='file:') $('#protocol-warn').style.display='block';
-    hljs.registerLanguage && hljs.registerLanguage('sql', window.hljsSqlLang||window.hljs?.getLanguage?.('sql'));
+    if(typeof hljs!=='undefined' && hljs.getLanguage && !hljs.getLanguage('sql')){
+      try{ hljs.registerLanguage('sql', window.hljsDefineSql||function(){return{}}); }catch(e){}
+    }
     renderNav(); renderStats(); navigate('dashboard');
     $('#btn-toggle-sidebar').onclick = ()=>$('#sidebar').classList.toggle('collapsed');
     $('#btn-export').onclick = exportAll;
