@@ -5,10 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>医院 SQL 知识库 v1.1</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/atom-one-dark.min.css">
-<script>window.hljs=undefined;</script>
-<script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/core.min.js" onerror=""></script>
-<script>if(typeof hljs!=='undefined'&&hljs.registerLanguage){document.write('<scr'+'ipt src=\"https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/sql.min.js\"><\/scr'+'ipt>');}</script>
-<script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js" onerror=""></script>
+<script>
+// CDN 库延迟安全加载 —— 即使全部失败也不影响启动
+(function(){
+  function loadScript(url){return new Promise(function(r){var s=document.createElement('script');s.src=url;s.onload=function(){r(true)};s.onerror=function(){r(false)};document.head.appendChild(s);})}
+  window._cdnReady = loadScript('https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/core.min.js').then(function(ok){
+    if(ok && typeof hljs!=='undefined') return loadScript('https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/sql.min.js');
+  }).then(function(){
+    return loadScript('https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js');
+  }).catch(function(){});
+})();
+</script>
 <style>
 :root{
   --bg-base:#0f1117; --bg-surface:#161a24; --bg-elevated:#1e2433; --bg-hover:#252c3d;
@@ -1315,6 +1322,8 @@ function openModal(title, bodyHtml, actions, opts={}){
  * ============================================================ */
 (async function boot(){
   try{
+    // 等待 CDN 库加载（无论成功失败都继续）
+    if(window._cdnReady) await window._cdnReady.catch(function(){});
     await KB.init();
     const migrated = await KB.migrateFromLocalStorage();
     if(migrated) toast('检测到旧版数据，已自动升级到 IndexedDB','success',4000);
