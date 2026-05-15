@@ -258,7 +258,7 @@ function extractTables(sql){
 const KB = {
   db:null,
   DB_NAME:'HIS_SQL_KB_DB',
-  VERSION:1,
+  VERSION:2,
   async init(){
     return new Promise((resolve,reject)=>{
       const req = indexedDB.open(this.DB_NAME,this.VERSION);
@@ -278,6 +278,9 @@ const KB = {
         }
         if(!db.objectStoreNames.contains('config')){
           db.createObjectStore('config',{keyPath:'key'});
+        }
+        if(!db.objectStoreNames.contains('chatSessions')){
+          db.createObjectStore('chatSessions',{keyPath:'id'});
         }
       };
       req.onsuccess = e=>{ this.db=e.target.result; resolve(); };
@@ -361,6 +364,19 @@ const KB = {
     }catch(e){console.warn('migrate skip',e);}
     localStorage.setItem('HIS_SQL_KB_MIGRATED','1');
     return migrated;
+  },
+  // chatSessions ----------
+  async getChatHistory(){
+    try{
+      const rec = await this._req(this._tx('chatSessions').get('current'));
+      return rec ? (rec.messages||[]) : [];
+    }catch(e){ return []; }
+  },
+  async saveChatHistory(messages){
+    return this._req(this._tx('chatSessions','readwrite').put({id:'current', messages, updatedAt:new Date().toISOString()}));
+  },
+  async clearChatHistory(){
+    return this._req(this._tx('chatSessions','readwrite').delete('current'));
   }
 };
 
@@ -449,6 +465,7 @@ const App = {
     [this.tables, this.sqls, this.config] = await Promise.all([KB.getTables(), KB.getSqls(), KB.getConfig()]);
     this.tables.sort((a,b)=>a.tableName.localeCompare(b.tableName));
     this.sqls.sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
+    this.chatHistory = await KB.getChatHistory();
   }
 };
 
@@ -906,9 +923,6 @@ function openSqlEditor(sql){
 
 /* ---------- AI 写 SQL ---------- */
 function renderChatPane(root){
-  if(!App.chatHistory.length){
-    App.chatHistory = [];
-  }
   root.innerHTML = `
   <div class="chat-pane">
     <div class="context-panel" id="ctx-panel">
@@ -956,7 +970,7 @@ function renderChatPane(root){
   renderChatStream();
   $('#btn-send').onclick = ()=>sendChat();
   $('#btn-stop').onclick = ()=>App.abortChat && App.abortChat();
-  $('#btn-clear-chat').onclick = ()=>{App.chatHistory=[];renderChatStream();};
+  $('#btn-clear-chat').onclick = ()=>{App.chatHistory=[];KB.clearChatHistory();renderChatStream();};
   // 快捷操作按钮
   renderQuickActions();
   $('#chat-input').addEventListener('keydown',e=>{
@@ -1295,6 +1309,7 @@ async function sendChat(){
   }finally{
     $('#btn-send').style.display=''; $('#btn-stop').style.display='none';
     App.abortChat=null;
+    KB.saveChatHistory(App.chatHistory);
   }
 }
 
