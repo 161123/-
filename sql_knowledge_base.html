@@ -185,6 +185,17 @@ textarea{resize:vertical;font-family:"JetBrains Mono","Consolas",monospace;font-
 hr{border:none;border-top:1px solid var(--border-default);margin:14px 0}
 small{color:var(--text-secondary)}
 .kbd{font-family:"JetBrains Mono",monospace;background:var(--bg-elevated);padding:1px 6px;border-radius:3px;font-size:11px;border:1px solid var(--border-default)}
+/* Save-to-library action buttons in chat messages */
+.msg-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:8px;border-top:1px solid var(--border-default)}
+.msg-actions .save-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:14px;
+  font-size:11.5px;cursor:pointer;border:1px solid var(--border-default);background:var(--bg-elevated);color:var(--text-secondary);transition:.15s}
+.msg-actions .save-btn:hover{border-color:var(--accent-blue);color:var(--accent-blue);background:rgba(79,142,247,.08)}
+.msg-actions .save-btn.saved{border-color:var(--accent-green);color:var(--accent-green);cursor:default;opacity:.7}
+/* Quick-action prompt buttons */
+.quick-actions{display:flex;flex-wrap:wrap;gap:6px;padding:6px 14px;border-top:1px solid var(--border-default);background:var(--bg-surface)}
+.quick-actions .qa-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:16px;
+  font-size:11.5px;cursor:pointer;border:1px solid var(--border-default);background:var(--bg-elevated);color:var(--text-secondary);transition:.15s}
+.quick-actions .qa-btn:hover{border-color:var(--accent-blue);color:var(--accent-blue);background:rgba(79,142,247,.08)}
 </style>
 </head>
 <body>
@@ -925,11 +936,7 @@ function renderChatPane(root){
       </div>
     </div>
     <div class="chat-stream" id="chat-stream"></div>
-    <div style="padding:4px 14px;border-top:1px solid var(--border-default);display:flex;gap:6px;flex-wrap:wrap;background:var(--bg-surface)">
-      <button class="ghost" id="btn-tpl-explore" style="font-size:11px;padding:3px 8px" title="生成查询Oracle数据字典的SQL，获取表结构/外键/触发器">🔍 探查表结构</button>
-      <button class="ghost" id="btn-tpl-parse" style="font-size:11px;padding:3px 8px" title="粘贴查询结果，AI帮你整理成标准表结构">📋 解析查询结果</button>
-      <button class="ghost" id="btn-tpl-fk" style="font-size:11px;padding:3px 8px" title="查询指定表的外键约束和触发器">🔗 查外键/触发器</button>
-    </div>
+    <div class="quick-actions" id="quick-actions"></div>
     <div class="chat-input">
       <textarea id="chat-input" placeholder="例如：写一个查询本月每天门诊收入的 SQL，按科室分组..."></textarea>
       <div style="display:flex;flex-direction:column;gap:6px">
@@ -950,18 +957,8 @@ function renderChatPane(root){
   $('#btn-send').onclick = ()=>sendChat();
   $('#btn-stop').onclick = ()=>App.abortChat && App.abortChat();
   $('#btn-clear-chat').onclick = ()=>{App.chatHistory=[];renderChatStream();};
-  $('#btn-tpl-explore').onclick = ()=>{
-    $('#chat-input').value = '我需要了解以下表的完整结构，请帮我生成 Oracle 数据字典查询 SQL（需包含字段名、类型、长度、注释、是否可空），同时也查出该表的外键约束、索引和触发器信息。\n\n目标表名：';
-    $('#chat-input').focus();
-  };
-  $('#btn-tpl-parse').onclick = ()=>{
-    $('#chat-input').value = '以下是我从 Oracle 数据字典查询出的结果，请帮我整理成标准格式（每行一个字段，格式：字段名,类型,注释），并列出外键关系和触发器说明。如有枚举值类型字段请特别标注。\n\n查询结果如下：\n';
-    $('#chat-input').focus();
-  };
-  $('#btn-tpl-fk').onclick = ()=>{
-    $('#chat-input').value = '请生成查询以下表的外键约束（FK）、唯一约束（UK）、检查约束（CK）和触发器（Trigger）的 Oracle SQL。我需要知道约束名、关联的父表和字段、触发器的类型和触发时机。\n\n目标表名：';
-    $('#chat-input').focus();
-  };
+  // 快捷操作按钮
+  renderQuickActions();
   $('#chat-input').addEventListener('keydown',e=>{
     if(e.key==='Enter' && (e.ctrlKey||e.metaKey)){ e.preventDefault(); sendChat(); }
   });
@@ -1046,11 +1043,219 @@ function renderMarkdown(text){
     .replace(/```([\s\S]*?)```/g,(_,c)=>`<pre><code>${c}</code></pre>`)
     .replace(/`([^`]+?)`/g,(_,c)=>`<code>${c}</code>`);
 }
+
+/* 检测 AI 回复中的表结构和 SQL 代码块，生成保存操作 */
+function detectSaveActions(rawText){
+  const actions = [];
+  // 检测 SQL 代码块
+  const sqlBlockRe = /```sql\n([\s\S]*?)```/gi;
+  let m;
+  while((m = sqlBlockRe.exec(rawText)) !== null){
+    const sqlCode = m[1].trim();
+    if(sqlCode.length > 10){
+      let name = '';
+      const commentMatch = sqlCode.match(/^--\s*(.+)/m);
+      if(commentMatch) name = commentMatch[1].trim().slice(0,40);
+      if(!name){
+        const kwMatch = sqlCode.match(/\b(?:create\s+(?:or\s+replace\s+)?(?:view|procedure|function|table))\s+(\S+)/i);
+        if(kwMatch) name = kwMatch[1];
+      }
+      if(!name){
+        const tables = extractTables(sqlCode);
+        name = tables.length ? `查询_${tables[0]}` : '未命名SQL';
+      }
+      actions.push({type:'sql', name, sql:sqlCode});
+    }
+  }
+  // 检测 CREATE TABLE
+  const createTableRe = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"']?(\w+)[`"']?\s*\(([\s\S]*?)\);?/gi;
+  while((m = createTableRe.exec(rawText)) !== null){
+    const tableName = m[1];
+    const body = m[2];
+    const fields = [];
+    body.split('\n').forEach(line=>{
+      line = line.trim().replace(/,$/,'');
+      if(!line || /^(primary|unique|index|key|constraint|check|foreign)/i.test(line)) return;
+      const parts = line.split(/\s+/);
+      if(parts.length >= 2){
+        fields.push({name:parts[0].replace(/[`"']/g,''), type:parts[1], comment:parts.slice(2).join(' ').replace(/--/,'').trim()});
+      }
+    });
+    if(fields.length > 0) actions.push({type:'table', tableName, fields});
+  }
+  // 检测 markdown 表格形式的字段描述
+  const mdTableRe = /#{2,3}\s*(?:表[：:]?\s*)?[`]?(\w+)[`]?[^\n]*\n(?:\|[^\n]+\n){2,}/g;
+  while((m = mdTableRe.exec(rawText)) !== null){
+    const block = m[0];
+    const tableName = m[1];
+    if(actions.some(a=>a.type==='table' && a.tableName.toLowerCase()===tableName.toLowerCase())) continue;
+    const rows = block.split('\n').filter(r=>r.trim().startsWith('|'));
+    if(rows.length < 3) continue;
+    const fields = [];
+    rows.slice(2).forEach(row=>{
+      const cells = row.split('|').map(c=>c.trim()).filter(Boolean);
+      if(cells.length >= 2) fields.push({name:cells[0].replace(/[`]/g,''), type:cells[1]||'', comment:cells[2]||''});
+    });
+    if(fields.length > 0) actions.push({type:'table', tableName, fields});
+  }
+  return actions;
+}
+
+/* 弹出确认窗并存入表结构库 */
+function openSaveTableFromChat(action){
+  const tableName = action.tableName || '';
+  const fieldsHtml = (action.fields||[]).map(f=>`<tr><td>${escapeHtml(f.name)}</td><td>${escapeHtml(f.type)}</td><td>${escapeHtml(f.comment)}</td></tr>`).join('');
+  openModal('存入表结构库',`
+    <div class="form-grid">
+      <div class="form-row"><label>表名 *</label><input id="save-tbl-name" value="${escapeHtml(tableName)}"></div>
+      <div class="form-row"><label>中文名称</label><input id="save-tbl-cn" placeholder="可选"></div>
+      <div class="form-row"><label>分组</label><input id="save-tbl-group" placeholder="HIS收入 / 绩效 / 门诊..."></div>
+    </div>
+    <h4 style="margin:12px 0 6px">识别到的字段（${(action.fields||[]).length}）</h4>
+    <table class="fields-table">
+      <thead><tr><th>字段名</th><th>类型</th><th>注释</th></tr></thead>
+      <tbody>${fieldsHtml || '<tr><td colspan="3" style="text-align:center;padding:14px;color:var(--text-disabled)">无字段</td></tr>'}</tbody>
+    </table>
+  `,[
+    {label:'取消',action:c=>c()},
+    {label:'保存到知识库',cls:'primary',action:async close=>{
+      const tn = $('#save-tbl-name').value.trim();
+      if(!tn) return toast('表名必填','error');
+      const existing = App.tables.find(t=>t.tableName.toLowerCase()===tn.toLowerCase());
+      if(existing && !confirm(`表「${tn}」已存在，是否覆盖更新字段？`)) return;
+      const rec = existing || {tableName:tn};
+      rec.chineseName = $('#save-tbl-cn').value.trim() || rec.chineseName || '';
+      rec.group = $('#save-tbl-group').value.trim() || rec.group || '';
+      rec.fields = action.fields || rec.fields || [];
+      await KB.saveTable(rec);
+      await App.loadAll(); renderStats();
+      close(); toast(`表「${tn}」已保存到表结构库`,'success');
+    }}
+  ]);
+}
+
+/* 弹出确认窗并存入 SQL 资产库 */
+function openSaveSqlFromChat(action){
+  const name = action.name || '';
+  const sqlPreview = (action.sql||'').slice(0,300) + ((action.sql||'').length>300?'...':'');
+  openModal('存入 SQL 资产库',`
+    <div class="form-grid">
+      <div class="form-row"><label>SQL 名称 *</label><input id="save-sql-name" value="${escapeHtml(name)}"></div>
+      <div class="form-row"><label>类型</label><select id="save-sql-type">
+        ${['查询','统计','存储过程','视图','其他'].map(t=>`<option>${t}</option>`).join('')}
+      </select></div>
+      <div class="form-row full"><label>说明（可选）</label><input id="save-sql-desc" placeholder="简要描述这条 SQL 的用途"></div>
+      <div class="form-row full"><label>标签（逗号分隔，可选）</label><input id="save-sql-tags" placeholder="门诊,收入"></div>
+    </div>
+    <h4 style="margin:12px 0 6px">SQL 预览</h4>
+    <div class="code-block" style="max-height:200px"><pre><code class="language-sql">${escapeHtml(sqlPreview)}</code></pre></div>
+  `,[
+    {label:'取消',action:c=>c()},
+    {label:'保存到知识库',cls:'primary',action:async close=>{
+      const n = $('#save-sql-name').value.trim();
+      if(!n) return toast('名称必填','error');
+      const rec = {
+        name:n,
+        sql:action.sql,
+        type:$('#save-sql-type').value,
+        status:'draft',
+        description:$('#save-sql-desc').value.trim(),
+        tags:$('#save-sql-tags').value.split(/[,，\s]+/).map(t=>t.trim()).filter(Boolean)
+      };
+      await KB.saveSql(rec);
+      await App.loadAll(); rebuildSqlFuse(); renderStats();
+      close(); toast(`SQL「${n}」已保存到资产库`,'success');
+    }}
+  ]);
+  typeof hljs!=='undefined' && hljs.highlightAll();
+}
+
+/* 快捷操作按钮定义 —— 点击后弹出输入框，确认后自动发送 */
+const QUICK_ACTIONS = [
+  {icon:'🔍', label:'探查表结构', prompt:(name)=>`我需要了解表 ${name} 的完整结构，请帮我生成 Oracle 数据字典查询 SQL（需包含字段名、类型、长度、注释、是否可空），同时也查出该表的外键约束、索引和触发器信息。`, placeholder:'输入表名，如 t_outpatient_fee'},
+  {icon:'📋', label:'解析查询结果', prompt:(text)=>`以下是我从 Oracle 数据字典查询出的结果，请帮我整理成标准格式（每行一个字段，格式：字段名,类型,注释），并列出外键关系和触发器说明。如有枚举值类型字段请特别标注。\n\n查询结果如下：\n${text}`, placeholder:'粘贴数据字典查询结果'},
+  {icon:'🔗', label:'查外键/触发器', prompt:(name)=>`请生成查询表 ${name} 的外键约束（FK）、唯一约束（UK）、检查约束（CK）和触发器（Trigger）的 Oracle SQL。我需要知道约束名、关联的父表和字段、触发器的类型和触发时机。`, placeholder:'输入表名，如 t_patient_info'},
+  {icon:'📊', label:'生成统计SQL', prompt:(desc)=>`请根据以下需求生成统计 SQL：${desc}`, placeholder:'描述统计需求，如"本月各科室门诊收入汇总"'},
+  {icon:'🛠️', label:'优化SQL', prompt:(sql)=>`请帮我优化以下 SQL 的性能，并解释优化思路：\n\`\`\`sql\n${sql}\n\`\`\``, placeholder:'粘贴需要优化的 SQL'},
+];
+
+function renderQuickActions(){
+  const container = $('#quick-actions'); if(!container) return;
+  container.innerHTML = QUICK_ACTIONS.map((qa,i)=>`<span class="qa-btn" data-qi="${i}">${qa.icon} ${qa.label}</span>`).join('');
+  $$('.qa-btn', container).forEach(btn=>{
+    btn.onclick = ()=>{
+      const qi = Number(btn.dataset.qi);
+      const qa = QUICK_ACTIONS[qi];
+      if(qa) openQuickActionInput(qa);
+    };
+  });
+}
+
+function openQuickActionInput(qa){
+  const needTextarea = qa.label.includes('解析') || qa.label.includes('优化');
+  openModal(qa.icon + ' ' + qa.label, `
+    <div class="form-row">
+      <label>${escapeHtml(qa.placeholder)}</label>
+      ${needTextarea
+        ? `<textarea id="qa-input" rows="6" placeholder="${escapeHtml(qa.placeholder)}"></textarea>`
+        : `<input id="qa-input" placeholder="${escapeHtml(qa.placeholder)}">`
+      }
+    </div>
+  `,[
+    {label:'取消',action:c=>c()},
+    {label:'发送',cls:'primary',action:close=>{
+      const val = $('#qa-input').value.trim();
+      if(!val) return toast('请填写内容','warn');
+      close();
+      const prompt = qa.prompt(val);
+      const ta = $('#chat-input');
+      if(ta) ta.value = prompt;
+      sendChat();
+    }}
+  ]);
+  setTimeout(()=>{const inp=$('#qa-input');if(inp)inp.focus();},100);
+}
+
 function renderChatStream(){
   const stream = $('#chat-stream'); if(!stream) return;
-  stream.innerHTML = App.chatHistory.length===0
-    ? '<div class="empty-state"><div class="ico">🤖</div>勾选上下文后开始提问<br><small>Ctrl/⌘ + Enter 发送</small></div>'
-    : App.chatHistory.map((m,i)=>`<div class="msg ${m.role}" data-i="${i}">${m.role==='assistant'?renderMarkdown(m.content):escapeHtml(m.content)}</div>`).join('');
+  if(App.chatHistory.length===0){
+    stream.innerHTML = '<div class="empty-state"><div class="ico">🤖</div>勾选上下文后开始提问<br><small>Ctrl/⌘ + Enter 发送 · 点击下方快捷按钮可快速提问</small></div>';
+    return;
+  }
+  stream.innerHTML = App.chatHistory.map((m,i)=>{
+    if(m.role==='assistant'){
+      const html = renderMarkdown(m.content);
+      const actions = detectSaveActions(m.content);
+      let actionsHtml = '';
+      if(actions.length > 0){
+        actionsHtml = '<div class="msg-actions">' + actions.map((a,j)=>{
+          if(a.type==='table'){
+            return `<span class="save-btn" data-mi="${i}" data-ai="${j}" data-action="table">📁 存入表结构库（${escapeHtml(a.tableName)}）</span>`;
+          } else {
+            return `<span class="save-btn" data-mi="${i}" data-ai="${j}" data-action="sql">📝 存入 SQL 资产库（${escapeHtml(a.name.slice(0,20))}）</span>`;
+          }
+        }).join('') + '</div>';
+      }
+      return `<div class="msg assistant" data-i="${i}">${html}${actionsHtml}</div>`;
+    } else {
+      return `<div class="msg ${m.role}" data-i="${i}">${escapeHtml(m.content)}</div>`;
+    }
+  }).join('');
+  // 绑定保存按钮事件
+  $$('.msg-actions .save-btn', stream).forEach(btn=>{
+    btn.onclick = (e)=>{
+      e.stopPropagation();
+      const mi = Number(btn.dataset.mi);
+      const ai = Number(btn.dataset.ai);
+      const msg = App.chatHistory[mi];
+      if(!msg) return;
+      const actions = detectSaveActions(msg.content);
+      const action = actions[ai];
+      if(!action) return;
+      if(action.type==='table') openSaveTableFromChat(action);
+      else openSaveSqlFromChat(action);
+    };
+  });
   typeof hljs!=='undefined' && hljs.highlightAll();
   stream.scrollTop = stream.scrollHeight;
 }
