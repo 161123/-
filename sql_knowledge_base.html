@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>医院 SQL 知识库 v1.1</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/atom-one-dark.min.css">
+<script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/sql.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+<style>
+:root{
+  --bg-base:#0f1117; --bg-surface:#161a24; --bg-elevated:#1e2433; --bg-hover:#252c3d;
+  --border-default:#2d3548; --border-active:#4f8ef7;
+  --text-primary:#e5eaf3; --text-secondary:#8b95b0; --text-disabled:#5a6580;
+  --accent-blue:#4f8ef7; --accent-green:#22c55e; --accent-amber:#f59e0b;
+  --accent-red:#ef4444; --accent-purple:#a78bfa; --code-bg:#0d1117;
+  --sidebar-w:220px;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg-base);color:var(--text-primary);font-size:13px;line-height:1.5;overflow:hidden}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--border-default);background:var(--bg-elevated);color:var(--text-primary);
+  padding:6px 12px;border-radius:6px;transition:.15s}
+button:hover{background:var(--bg-hover);border-color:var(--border-active)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.primary{background:var(--accent-blue);border-color:var(--accent-blue);color:#fff}
+button.primary:hover{filter:brightness(1.1)}
+button.danger{background:transparent;border-color:var(--accent-red);color:var(--accent-red)}
+button.danger:hover{background:var(--accent-red);color:#fff}
+button.ghost{background:transparent;border-color:transparent;color:var(--text-secondary)}
+button.ghost:hover{background:var(--bg-hover);color:var(--text-primary)}
+input,textarea,select{background:var(--bg-base);border:1px solid var(--border-default);border-radius:6px;
+  padding:6px 10px;outline:none;width:100%}
+input:focus,textarea:focus,select:focus{border-color:var(--border-active)}
+textarea{resize:vertical;font-family:"JetBrains Mono","Consolas",monospace;font-size:12.5px}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--bg-elevated);border-radius:5px}
+::-webkit-scrollbar-thumb:hover{background:var(--bg-hover)}
+::-webkit-scrollbar-track{background:transparent}
+.app{display:flex;height:100vh}
+.sidebar{width:var(--sidebar-w);background:var(--bg-surface);border-right:1px solid var(--border-default);
+  display:flex;flex-direction:column;flex-shrink:0}
+.sidebar.collapsed{width:48px}
+.sidebar.collapsed .nav-label,.sidebar.collapsed .brand-text,.sidebar.collapsed .stats{display:none}
+.brand{padding:14px 16px;border-bottom:1px solid var(--border-default);display:flex;align-items:center;gap:10px}
+.brand-logo{width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple));
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#fff;flex-shrink:0}
+.brand-text{font-weight:600;font-size:14px}
+.brand-text small{display:block;color:var(--text-secondary);font-weight:400;font-size:11px}
+.nav{flex:1;padding:8px 6px;overflow-y:auto}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;color:var(--text-secondary);
+  cursor:pointer;user-select:none;margin:2px 0}
+.nav-item:hover{background:var(--bg-hover);color:var(--text-primary)}
+.nav-item.active{background:var(--bg-elevated);color:var(--accent-blue)}
+.nav-icon{width:18px;text-align:center;flex-shrink:0}
+.stats{padding:10px 16px;border-top:1px solid var(--border-default);font-size:11px;color:var(--text-disabled)}
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.toolbar{height:44px;background:var(--bg-surface);border-bottom:1px solid var(--border-default);
+  display:flex;align-items:center;padding:0 14px;gap:10px;flex-shrink:0}
+.toolbar h2{margin:0;font-size:14px;font-weight:600}
+.toolbar .spacer{flex:1}
+.workspace{flex:1;overflow:hidden;position:relative}
+.pane{position:absolute;inset:0;display:none;flex-direction:column;overflow:hidden}
+.pane.active{display:flex}
+.warn-banner{background:rgba(239,68,68,.12);border-bottom:1px solid var(--accent-red);color:var(--accent-red);
+  padding:8px 14px;font-size:12px}
+/* List + detail layout */
+.split{display:flex;height:100%;min-height:0}
+.list-col{width:340px;border-right:1px solid var(--border-default);display:flex;flex-direction:column;background:var(--bg-surface);flex-shrink:0}
+.list-toolbar{padding:10px;border-bottom:1px solid var(--border-default);display:flex;flex-direction:column;gap:8px}
+.list-toolbar .row{display:flex;gap:6px}
+.search-input{position:relative}
+.search-input input{padding-left:30px}
+.search-input::before{content:"🔍";position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:12px;opacity:.6}
+.list-scroller{flex:1;overflow-y:auto;position:relative}
+.list-card{padding:10px 12px;border-bottom:1px solid var(--border-default);cursor:pointer}
+.list-card:hover{background:var(--bg-hover)}
+.list-card.active{background:var(--bg-elevated);border-left:3px solid var(--accent-blue);padding-left:9px}
+.list-card .title{font-weight:600;color:var(--text-primary);font-size:13px;display:flex;align-items:center;gap:6px}
+.list-card .meta{color:var(--text-secondary);font-size:11px;margin-top:4px;display:flex;gap:8px;flex-wrap:wrap}
+.tag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;background:var(--bg-elevated);color:var(--text-secondary);
+  border:1px solid var(--border-default)}
+.tag.blue{color:var(--accent-blue);border-color:var(--accent-blue);background:rgba(79,142,247,.08)}
+.tag.green{color:var(--accent-green);border-color:var(--accent-green);background:rgba(34,197,94,.08)}
+.tag.amber{color:var(--accent-amber);border-color:var(--accent-amber);background:rgba(245,158,11,.08)}
+.tag.red{color:var(--accent-red);border-color:var(--accent-red);background:rgba(239,68,68,.08)}
+.tag.purple{color:var(--accent-purple);border-color:var(--accent-purple);background:rgba(167,139,250,.08)}
+.detail-col{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.detail-toolbar{padding:10px 14px;border-bottom:1px solid var(--border-default);display:flex;gap:8px;align-items:center}
+.detail-body{flex:1;overflow-y:auto;padding:18px 22px}
+.empty-state{flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-disabled);
+  flex-direction:column;gap:10px;text-align:center;padding:40px}
+.empty-state .ico{font-size:42px;opacity:.4}
+/* Forms */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.form-row{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.form-row.full{grid-column:1/-1}
+.form-row label{color:var(--text-secondary);font-size:12px}
+/* Field editor table */
+.fields-table{width:100%;border-collapse:collapse;background:var(--bg-base);border:1px solid var(--border-default);border-radius:6px;overflow:hidden}
+.fields-table th,.fields-table td{padding:6px 8px;border-bottom:1px solid var(--border-default);text-align:left;font-size:12px;vertical-align:top}
+.fields-table th{background:var(--bg-elevated);color:var(--text-secondary);font-weight:500}
+.fields-table td input{background:transparent;border:none;padding:2px 4px;border-radius:3px}
+.fields-table td input:focus{background:var(--bg-elevated)}
+.fields-table tr:hover td{background:var(--bg-elevated)}
+/* Code block */
+.code-block{background:var(--code-bg);border:1px solid var(--border-default);border-radius:6px;
+  padding:14px;font-family:"JetBrains Mono","Consolas",monospace;font-size:12.5px;line-height:1.6;
+  white-space:pre-wrap;overflow-x:auto;max-height:600px}
+.code-block pre{margin:0}
+/* Chat */
+.chat-pane{display:flex;flex-direction:column;height:100%}
+.context-panel{background:var(--bg-surface);border-bottom:1px solid var(--border-default)}
+.context-head{padding:10px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none}
+.context-head .chev{transition:transform .2s}
+.context-panel.open .context-head .chev{transform:rotate(90deg)}
+.context-body{display:none;padding:0 14px 12px;max-height:280px;overflow-y:auto}
+.context-panel.open .context-body{display:block}
+.context-section{margin-bottom:10px}
+.context-section h4{margin:6px 0;color:var(--text-secondary);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.chk-list{display:flex;flex-wrap:wrap;gap:6px}
+.chk-list label{display:flex;align-items:center;gap:5px;background:var(--bg-elevated);padding:4px 10px;border-radius:14px;
+  font-size:12px;cursor:pointer;border:1px solid var(--border-default)}
+.chk-list label.checked{border-color:var(--accent-blue);color:var(--accent-blue);background:rgba(79,142,247,.08)}
+.chk-list input{display:none}
+.chat-stream{flex:1;overflow-y:auto;padding:18px 22px;display:flex;flex-direction:column;gap:14px}
+.msg{max-width:88%;padding:10px 14px;border-radius:10px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.msg.user{align-self:flex-end;background:var(--accent-blue);color:#fff;border-bottom-right-radius:2px}
+.msg.assistant{align-self:flex-start;background:var(--bg-surface);border:1px solid var(--border-default);border-bottom-left-radius:2px}
+.msg.system{align-self:center;font-size:11px;color:var(--text-disabled);background:transparent;padding:4px}
+.msg.assistant pre{background:var(--code-bg);padding:10px;border-radius:6px;overflow-x:auto;margin:8px 0}
+.msg.assistant code:not(pre code){background:var(--bg-elevated);padding:1px 5px;border-radius:3px;font-size:90%}
+.chat-input{border-top:1px solid var(--border-default);padding:12px 14px;background:var(--bg-surface);display:flex;gap:8px}
+.chat-input textarea{flex:1;min-height:50px;max-height:160px}
+/* Modal & Toast */
+.modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:flex;align-items:center;justify-content:center;padding:30px}
+.modal{background:var(--bg-surface);border:1px solid var(--border-default);border-radius:10px;
+  width:560px;max-width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.modal.lg{width:780px}
+.modal-head{padding:14px 18px;border-bottom:1px solid var(--border-default);display:flex;align-items:center}
+.modal-head h3{margin:0;font-size:14px;font-weight:600;flex:1}
+.modal-body{padding:18px;overflow-y:auto;flex:1}
+.modal-foot{padding:12px 18px;border-top:1px solid var(--border-default);display:flex;justify-content:flex-end;gap:8px}
+.toast-root{position:fixed;top:20px;right:20px;z-index:1000;display:flex;flex-direction:column;gap:8px}
+.toast{background:var(--bg-elevated);border:1px solid var(--border-default);padding:10px 14px;border-radius:8px;
+  box-shadow:0 6px 16px rgba(0,0,0,.4);min-width:240px;font-size:12.5px;animation:slideIn .2s}
+.toast.success{border-left:3px solid var(--accent-green)}
+.toast.error{border-left:3px solid var(--accent-red)}
+.toast.warn{border-left:3px solid var(--accent-amber)}
+.toast.info{border-left:3px solid var(--accent-blue)}
+@keyframes slideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+/* Self-check */
+.check-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:24px}
+.check-card{background:var(--bg-surface);border:1px solid var(--border-default);border-radius:10px;padding:16px}
+.check-card .num{font-size:28px;font-weight:700;margin:6px 0}
+.check-card .label{color:var(--text-secondary);font-size:12px}
+.check-card.red .num{color:var(--accent-red)}
+.check-card.amber .num{color:var(--accent-amber)}
+.check-card.blue .num{color:var(--accent-blue)}
+.check-card.green .num{color:var(--accent-green)}
+.issue-list{display:flex;flex-direction:column;gap:8px}
+.issue{padding:10px 14px;border-radius:6px;border:1px solid var(--border-default);background:var(--bg-surface);
+  display:flex;gap:10px;align-items:flex-start}
+.issue .lvl{flex-shrink:0}
+.issue .msg-text{flex:1}
+.issue .obj{color:var(--text-secondary);font-size:11px;margin-top:3px;font-family:"JetBrains Mono",monospace}
+/* Virtual list */
+.vl-spacer{position:relative}
+.vl-row{position:absolute;left:0;right:0}
+/* Loader */
+.dot-loader{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent-blue);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+.spin{animation:spin 1s linear infinite;display:inline-block}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+hr{border:none;border-top:1px solid var(--border-default);margin:14px 0}
+small{color:var(--text-secondary)}
+.kbd{font-family:"JetBrains Mono",monospace;background:var(--bg-elevated);padding:1px 6px;border-radius:3px;font-size:11px;border:1px solid var(--border-default)}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-logo">SQL</div>
+      <div class="brand-text">SQL 知识库<small>HIS · v1.1</small></div>
+    </div>
+    <nav class="nav" id="nav"></nav>
+    <div class="stats" id="stats"></div>
+  </aside>
+  <div class="main">
+    <div class="toolbar">
+      <h2 id="page-title">仪表盘</h2>
+      <div class="spacer"></div>
+      <button class="ghost" id="btn-toggle-sidebar" title="折叠侧栏">≡</button>
+      <button class="ghost" id="btn-export" title="导出 JSON">📥</button>
+      <button class="ghost" id="btn-import" title="导入 JSON">📤</button>
+    </div>
+    <div id="protocol-warn" class="warn-banner" style="display:none">
+      ⚠️ 当前以 HTTP/HTTPS 协议加载，存在 API Key 被同源脚本读取的风险。建议下载 HTML 后双击以 file:// 打开。
+    </div>
+    <div class="workspace" id="workspace"></div>
+  </div>
+</div>
+<div id="modal-root"></div>
+<div class="toast-root" id="toast-root"></div>
+
+<script>
+/* ============================================================
+ * 0. 工具
+ * ============================================================ */
+const $ = (sel,root=document)=>root.querySelector(sel);
+const $$ = (sel,root=document)=>Array.from(root.querySelectorAll(sel));
+const uuid = ()=> 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16);});
+const debounce = (fn,ms=300)=>{let t;return (...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms)}};
+const escapeHtml = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+const fmtDate = d => { if(!d) return '-'; const x=new Date(d); return x.toISOString().slice(0,16).replace('T',' '); };
+const daysAgo = d => { if(!d) return Infinity; return Math.floor((Date.now()-new Date(d).getTime())/86400000); };
+function toast(msg,type='info',ms=2500){
+  const el=document.createElement('div');el.className='toast '+type;el.textContent=msg;
+  $('#toast-root').appendChild(el);setTimeout(()=>el.remove(),ms);
+}
+function maskKey(k){if(!k)return'';if(k.length<10)return'****';return k.slice(0,3)+'****'+k.slice(-4);}
+
+/* SQL 表名提取（FROM/JOIN 后的标识符） */
+function extractTables(sql){
+  if(!sql) return [];
+  const cleaned = sql.replace(/--.*$/gm,'').replace(/\/\*[\s\S]*?\*\//g,'');
+  const re = /\b(?:from|join|update|into)\s+([a-zA-Z_][\w]*)/gi;
+  const set = new Set(); let m;
+  while((m=re.exec(cleaned))){ set.add(m[1].toLowerCase()); }
+  return Array.from(set);
+}
+
+/* ============================================================
+ * 1. 数据访问层  KB
+ * ============================================================ */
+const KB = {
+  db:null,
+  DB_NAME:'HIS_SQL_KB_DB',
+  VERSION:1,
+  async init(){
+    return new Promise((resolve,reject)=>{
+      const req = indexedDB.open(this.DB_NAME,this.VERSION);
+      req.onupgradeneeded = e=>{
+        const db = e.target.result;
+        if(!db.objectStoreNames.contains('tables')){
+          const s=db.createObjectStore('tables',{keyPath:'id'});
+          s.createIndex('tableName','tableName',{unique:true});
+          s.createIndex('group','group',{unique:false});
+        }
+        if(!db.objectStoreNames.contains('sqls')){
+          const s=db.createObjectStore('sqls',{keyPath:'id'});
+          s.createIndex('name','name',{unique:false});
+          s.createIndex('type','type',{unique:false});
+          s.createIndex('status','status',{unique:false});
+          s.createIndex('createdAt','createdAt',{unique:false});
+        }
+        if(!db.objectStoreNames.contains('config')){
+          db.createObjectStore('config',{keyPath:'key'});
+        }
+      };
+      req.onsuccess = e=>{ this.db=e.target.result; resolve(); };
+      req.onerror = e=>reject(e.target.error);
+    });
+  },
+  _tx(store,mode='readonly'){
+    return this.db.transaction(store,mode).objectStore(store);
+  },
+  _req(req){
+    return new Promise((res,rej)=>{
+      req.onsuccess=()=>res(req.result);
+      req.onerror=()=>rej(req.error);
+    });
+  },
+  async _all(store){
+    const s=this._tx(store);
+    return new Promise((res,rej)=>{
+      const out=[]; const r=s.openCursor();
+      r.onsuccess=e=>{const c=e.target.result;if(c){out.push(c.value);c.continue();}else res(out);};
+      r.onerror=()=>rej(r.error);
+    });
+  },
+  // tables ----------
+  async getTables(){ return this._all('tables'); },
+  async getTable(id){ return this._req(this._tx('tables').get(id)); },
+  async saveTable(t){
+    if(!t.id) t.id=uuid();
+    t.updatedAt = new Date().toISOString();
+    if(!t.fields) t.fields=[];
+    return this._req(this._tx('tables','readwrite').put(t));
+  },
+  async deleteTable(id){ return this._req(this._tx('tables','readwrite').delete(id)); },
+  // sqls ----------
+  async getSqls(){ return this._all('sqls'); },
+  async getSql(id){ return this._req(this._tx('sqls').get(id)); },
+  async saveSql(s){
+    if(!s.id){ s.id=uuid(); s.createdAt=new Date().toISOString(); }
+    s.updatedAt = new Date().toISOString();
+    s.tables = Array.from(new Set([...(s.tables||[]),...extractTables(s.sql||'')]));
+    s.tags = s.tags||[];
+    s.status = s.status||'draft';
+    s.type = s.type||'查询';
+    return this._req(this._tx('sqls','readwrite').put(s));
+  },
+  async deleteSql(id){ return this._req(this._tx('sqls','readwrite').delete(id)); },
+  // config ----------
+  async getConfig(){
+    const items = await this._all('config');
+    const out={};
+    items.forEach(it=>out[it.key]=it.value);
+    return Object.assign({
+      activeProvider:'',
+      providers:{},
+      defaultSystemNote:''
+    },out);
+  },
+  async saveConfig(cfg){
+    const tx = this.db.transaction('config','readwrite');
+    const s = tx.objectStore('config');
+    Object.entries(cfg).forEach(([k,v])=>s.put({key:k,value:v}));
+    return new Promise((res,rej)=>{tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);});
+  },
+  // localStorage 迁移
+  async migrateFromLocalStorage(){
+    const flag = localStorage.getItem('HIS_SQL_KB_MIGRATED');
+    if(flag) return false;
+    let migrated=false;
+    try{
+      const oldTables = JSON.parse(localStorage.getItem('hisKb_tables')||'[]');
+      const oldSqls = JSON.parse(localStorage.getItem('hisKb_sqls')||'[]');
+      const oldCfg = JSON.parse(localStorage.getItem('hisKb_config')||'null');
+      for(const t of oldTables){ await this.saveTable(t); migrated=true; }
+      for(const s of oldSqls){ await this.saveSql(s); migrated=true; }
+      if(oldCfg){ await this.saveConfig(oldCfg); migrated=true; }
+      if(migrated){
+        localStorage.removeItem('hisKb_tables');
+        localStorage.removeItem('hisKb_sqls');
+        localStorage.removeItem('hisKb_config');
+      }
+    }catch(e){console.warn('migrate skip',e);}
+    localStorage.setItem('HIS_SQL_KB_MIGRATED','1');
+    return migrated;
+  }
+};
+
+/* ============================================================
+ * 2. AI 适配层
+ * ============================================================ */
+async function callAI(messages, {systemPrompt='', onDelta=null, signal=null} = {}){
+  const cfg = await KB.getConfig();
+  const prov = cfg.providers[cfg.activeProvider];
+  if(!prov) throw new Error('未配置 AI 服务，请前往「设置」添加');
+  if(!prov.apiKey) throw new Error('当前服务缺少 API Key');
+  const ctrl = new AbortController();
+  const sig = signal || ctrl.signal;
+  const timer = setTimeout(()=>ctrl.abort(), prov.timeout||60000);
+  try{
+    if(prov.type==='anthropic'){
+      const body = { model: prov.modelId, max_tokens: prov.maxTokens||4096, stream: !!onDelta, messages };
+      if(systemPrompt) body.system = systemPrompt;
+      const res = await fetch(prov.apiUrl,{
+        method:'POST',
+        headers:{
+          'x-api-key': prov.apiKey,
+          'anthropic-version':'2023-06-01',
+          'anthropic-dangerous-direct-browser-access':'true',
+          'Content-Type':'application/json'
+        },
+        body: JSON.stringify(body), signal: sig
+      });
+      if(!res.ok) throw new Error('Anthropic '+res.status+': '+(await res.text()).slice(0,300));
+      if(!onDelta){ const j=await res.json(); return (j.content||[]).map(c=>c.text||'').join(''); }
+      return await readSSE(res, evt=>{
+        if(evt.type==='content_block_delta' && evt.delta?.type==='text_delta'){ onDelta(evt.delta.text); }
+      });
+    }else{
+      const msgs = [...messages]; if(systemPrompt) msgs.unshift({role:'system',content:systemPrompt});
+      const body = { model: prov.modelId, messages: msgs, stream: !!onDelta, temperature: prov.temperature ?? 0.3 };
+      const res = await fetch(prov.apiUrl,{
+        method:'POST',
+        headers:{ 'Authorization':'Bearer '+prov.apiKey, 'Content-Type':'application/json' },
+        body: JSON.stringify(body), signal: sig
+      });
+      if(!res.ok) throw new Error('OpenAI兼容 '+res.status+': '+(await res.text()).slice(0,300));
+      if(!onDelta){ const j=await res.json(); return j.choices?.[0]?.message?.content || ''; }
+      let full=''; await readSSE(res, evt=>{
+        const d = evt.choices?.[0]?.delta?.content; if(d){ full+=d; onDelta(d); }
+      });
+      return full;
+    }
+  }catch(e){
+    if(e.name==='AbortError') throw new Error('AI 请求超时或已中止');
+    throw e;
+  }finally{ clearTimeout(timer); }
+}
+async function readSSE(res, cb){
+  const reader = res.body.getReader();
+  const dec = new TextDecoder(); let buf='';
+  while(true){
+    const {value,done} = await reader.read(); if(done) break;
+    buf += dec.decode(value,{stream:true});
+    const parts = buf.split('\n');
+    buf = parts.pop();
+    for(const line of parts){
+      const t=line.trim(); if(!t || t.startsWith(':')) continue;
+      if(t.startsWith('data:')){
+        const data=t.slice(5).trim();
+        if(data==='[DONE]') return;
+        try{ cb(JSON.parse(data)); }catch{}
+      }
+    }
+  }
+}
+
+/* ============================================================
+ * 3. 应用状态
+ * ============================================================ */
+const App = {
+  page:'dashboard',
+  tables:[], sqls:[], config:null,
+  selectedTableId:null, selectedSqlId:null,
+  filterSql:{ q:'', type:'', status:'' },
+  filterTable:{ q:'', group:'' },
+  contextSel:{ tables:new Set(), sqls:new Set() },
+  chatHistory:[],
+  abortChat:null,
+  async loadAll(){
+    [this.tables, this.sqls, this.config] = await Promise.all([KB.getTables(), KB.getSqls(), KB.getConfig()]);
+    this.tables.sort((a,b)=>a.tableName.localeCompare(b.tableName));
+    this.sqls.sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
+  }
+};
+
+/* ============================================================
+ * 4. 路由 & 渲染
+ * ============================================================ */
+const PAGES = [
+  {id:'dashboard', name:'仪表盘', icon:'📊'},
+  {id:'tables',    name:'表结构库', icon:'📁'},
+  {id:'sqls',      name:'SQL 资产库', icon:'📝'},
+  {id:'chat',      name:'AI 写 SQL', icon:'🤖'},
+  {id:'check',     name:'知识库自检', icon:'🔍'},
+  {id:'settings',  name:'设置', icon:'⚙️'},
+];
+
+function renderNav(){
+  const nav=$('#nav');
+  nav.innerHTML = PAGES.map(p=>`
+    <div class="nav-item ${p.id===App.page?'active':''}" data-page="${p.id}">
+      <span class="nav-icon">${p.icon}</span><span class="nav-label">${p.name}</span>
+    </div>
+  `).join('');
+  $$('.nav-item',nav).forEach(el=>el.onclick=()=>navigate(el.dataset.page));
+}
+function renderStats(){
+  $('#stats').innerHTML = `表 ${App.tables.length} · SQL ${App.sqls.length}`;
+}
+function navigate(page){
+  App.page = page;
+  $('#page-title').textContent = (PAGES.find(p=>p.id===page)||{}).name||'';
+  renderNav();
+  renderWorkspace();
+}
+function renderWorkspace(){
+  const ws=$('#workspace');
+  ws.innerHTML='';
+  const pane=document.createElement('div');
+  pane.className='pane active';
+  ws.appendChild(pane);
+  ({
+    dashboard:renderDashboard,
+    tables:renderTablesPane,
+    sqls:renderSqlsPane,
+    chat:renderChatPane,
+    check:renderCheckPane,
+    settings:renderSettingsPane
+  }[App.page])(pane);
+}
+
+/* ---------- 仪表盘 ---------- */
+function renderDashboard(root){
+  const recent = App.sqls.slice(0,8);
+  const issues = staticCheck();
+  root.innerHTML = `
+    <div class="detail-body">
+      <h2 style="margin:0 0 16px;font-size:18px">🏥 医院 SQL 知识库</h2>
+      <div class="check-grid">
+        <div class="check-card blue"><div class="label">表结构</div><div class="num">${App.tables.length}</div></div>
+        <div class="check-card green"><div class="label">SQL 资产</div><div class="num">${App.sqls.length}</div></div>
+        <div class="check-card amber"><div class="label">静态告警</div><div class="num">${issues.filter(i=>i.level!=='info').length}</div></div>
+        <div class="check-card red"><div class="label">高危项</div><div class="num">${issues.filter(i=>i.level==='error').length}</div></div>
+      </div>
+      <h3 style="font-size:14px;color:var(--text-secondary);margin:24px 0 10px">最近更新的 SQL</h3>
+      <div class="issue-list">
+        ${recent.length===0?'<div class="empty-state" style="padding:30px"><div class="ico">📭</div>暂无 SQL，去「SQL 资产库」新建一条吧</div>':
+          recent.map(s=>`<div class="issue" data-id="${s.id}" style="cursor:pointer">
+            <span>📝</span>
+            <div class="msg-text">
+              <strong>${escapeHtml(s.name)}</strong>
+              <div class="obj">类型: ${escapeHtml(s.type)} · 状态: ${escapeHtml(s.status)} · 更新于 ${fmtDate(s.updatedAt)}</div>
+            </div>
+          </div>`).join('')
+        }
+      </div>
+    </div>`;
+  $$('.issue[data-id]',root).forEach(el=>el.onclick=()=>{App.selectedSqlId=el.dataset.id; navigate('sqls');});
+}
+
+/* ---------- 表结构库 ---------- */
+function renderTablesPane(root){
+  root.innerHTML = `
+  <div class="split">
+    <div class="list-col">
+      <div class="list-toolbar">
+        <div class="row">
+          <button class="primary" id="btn-new-table" style="flex:1">+ 新建表</button>
+          <button id="btn-import-fields" title="批量导入字段">⬆ 字段</button>
+        </div>
+        <div class="search-input"><input id="tbl-search" placeholder="搜索表名/中文名/分组"></div>
+      </div>
+      <div class="list-scroller" id="tbl-list"></div>
+    </div>
+    <div class="detail-col" id="tbl-detail"></div>
+  </div>`;
+  $('#btn-new-table').onclick = ()=>openTableEditor(null);
+  $('#btn-import-fields').onclick = openFieldsImporter;
+  $('#tbl-search').oninput = debounce(e=>{App.filterTable.q=e.target.value;renderTableList();},250);
+  renderTableList();
+  renderTableDetail();
+}
+function getFilteredTables(){
+  const q=App.filterTable.q.trim().toLowerCase();
+  if(!q) return App.tables;
+  return App.tables.filter(t=>
+    (t.tableName||'').toLowerCase().includes(q) ||
+    (t.chineseName||'').toLowerCase().includes(q) ||
+    (t.group||'').toLowerCase().includes(q));
+}
+function renderTableList(){
+  const list = $('#tbl-list'); if(!list) return;
+  const arr = getFilteredTables();
+  list.innerHTML = arr.length===0
+    ? '<div class="empty-state" style="padding:30px"><div class="ico">📁</div>暂无表结构</div>'
+    : arr.map(t=>`
+      <div class="list-card ${t.id===App.selectedTableId?'active':''}" data-id="${t.id}">
+        <div class="title">${escapeHtml(t.tableName)}</div>
+        <div class="meta">
+          <span>${escapeHtml(t.chineseName||'-')}</span>
+          ${t.group?`<span class="tag blue">${escapeHtml(t.group)}</span>`:''}
+          <span>${(t.fields||[]).length} 字段</span>
+        </div>
+      </div>`).join('');
+  $$('.list-card',list).forEach(el=>el.onclick=()=>{App.selectedTableId=el.dataset.id;renderTableList();renderTableDetail();});
+}
+function renderTableDetail(){
+  const c=$('#tbl-detail'); if(!c) return;
+  const t = App.tables.find(x=>x.id===App.selectedTableId);
+  if(!t){ c.innerHTML = '<div class="empty-state"><div class="ico">📁</div>选择一张表查看详情</div>'; return; }
+  c.innerHTML = `
+    <div class="detail-toolbar">
+      <strong>${escapeHtml(t.tableName)}</strong>
+      <span class="tag">${escapeHtml(t.chineseName||'-')}</span>
+      <div class="spacer" style="flex:1"></div>
+      <button id="btn-edit-tbl">编辑</button>
+      <button class="danger" id="btn-del-tbl">删除</button>
+    </div>
+    <div class="detail-body">
+      <div class="form-grid">
+        <div><small>分组</small><div>${escapeHtml(t.group||'-')}</div></div>
+        <div><small>更新时间</small><div>${fmtDate(t.updatedAt)}</div></div>
+        <div class="form-row full"><small>关联关系</small><div>${escapeHtml(t.relations||'-')}</div></div>
+        <div class="form-row full"><small>重要枚举/说明</small><div style="white-space:pre-wrap">${escapeHtml(t.importantNote||'-')}</div></div>
+      </div>
+      <h4 style="margin:18px 0 8px">字段列表（${(t.fields||[]).length}）</h4>
+      <table class="fields-table">
+        <thead><tr><th style="width:30%">字段名</th><th style="width:18%">类型</th><th>注释</th></tr></thead>
+        <tbody>
+          ${(t.fields||[]).map(f=>`<tr><td>${escapeHtml(f.name)}</td><td>${escapeHtml(f.type||'')}</td><td>${escapeHtml(f.comment||'')}</td></tr>`).join('')||'<tr><td colspan="3" style="text-align:center;color:var(--text-disabled);padding:24px">暂无字段</td></tr>'}
+        </tbody>
+      </table>
+    </div>`;
+  $('#btn-edit-tbl').onclick = ()=>openTableEditor(t);
+  $('#btn-del-tbl').onclick = async ()=>{
+    if(!confirm('确认删除该表结构？关联的 SQL 不会被删除，但可能产生孤立引用。')) return;
+    await KB.deleteTable(t.id);
+    App.selectedTableId=null; await App.loadAll();
+    renderStats(); renderTableList(); renderTableDetail();
+    toast('已删除','success');
+  };
+}
+function openTableEditor(table){
+  const isNew = !table;
+  table = table || {tableName:'',chineseName:'',group:'',fields:[],importantNote:'',relations:''};
+  const m = openModal(isNew?'新建表结构':'编辑表结构',`
+    <div class="form-grid">
+      <div class="form-row"><label>表名 *</label><input id="f-tableName" value="${escapeHtml(table.tableName)}"></div>
+      <div class="form-row"><label>中文名称</label><input id="f-chineseName" value="${escapeHtml(table.chineseName)}"></div>
+      <div class="form-row"><label>分组</label><input id="f-group" placeholder="HIS收入 / 绩效 / 门诊..." value="${escapeHtml(table.group)}"></div>
+      <div class="form-row"><label>关联关系</label><input id="f-relations" placeholder="如：与 t_X 通过 patientId 关联" value="${escapeHtml(table.relations)}"></div>
+      <div class="form-row full"><label>重要枚举/说明</label><textarea id="f-importantNote" rows="3" placeholder="如：status=1正常 0已退费 -1作废">${escapeHtml(table.importantNote)}</textarea></div>
+      <div class="form-row full">
+        <label>字段列表 <button id="btn-add-field" class="ghost" style="float:right;padding:2px 8px">+ 新增字段</button></label>
+        <table class="fields-table" id="f-fields">
+          <thead><tr><th>字段名</th><th>类型</th><th>注释</th><th style="width:30px"></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  `,[
+    {label:'取消',cls:'',action:close=>close()},
+    {label:'保存',cls:'primary',action:async close=>{
+      const tn = $('#f-tableName').value.trim();
+      if(!tn) return toast('表名必填','error');
+      const fields = $$('#f-fields tbody tr').map(tr=>({
+        name:tr.children[0].querySelector('input').value.trim(),
+        type:tr.children[1].querySelector('input').value.trim(),
+        comment:tr.children[2].querySelector('input').value.trim()
+      })).filter(f=>f.name);
+      const rec = Object.assign({},table,{
+        tableName:tn,
+        chineseName:$('#f-chineseName').value.trim(),
+        group:$('#f-group').value.trim(),
+        relations:$('#f-relations').value.trim(),
+        importantNote:$('#f-importantNote').value,
+        fields
+      });
+      // 表名唯一校验
+      const dup = App.tables.find(t=>t.tableName.toLowerCase()===tn.toLowerCase() && t.id!==rec.id);
+      if(dup) return toast('表名已存在','error');
+      await KB.saveTable(rec);
+      await App.loadAll(); App.selectedTableId=rec.id;
+      renderStats(); renderTableList(); renderTableDetail();
+      close(); toast('已保存','success');
+    }}
+  ],{lg:true});
+  // 渲染字段编辑行
+  const tbody = $('#f-fields tbody');
+  function addRow(f={name:'',type:'',comment:''}){
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td><input value="${escapeHtml(f.name)}"></td><td><input value="${escapeHtml(f.type)}"></td><td><input value="${escapeHtml(f.comment)}"></td><td><button class="ghost" type="button" style="padding:2px 6px">×</button></td>`;
+    tr.querySelector('button').onclick=()=>tr.remove();
+    tbody.appendChild(tr);
+  }
+  (table.fields||[]).forEach(addRow);
+  if((table.fields||[]).length===0) addRow();
+  $('#btn-add-field').onclick = e=>{e.preventDefault();addRow();};
+}
+
+function openFieldsImporter(){
+  if(App.tables.length===0) return toast('请先创建至少一张表','warn');
+  openModal('批量导入字段','<div>'+
+    '<div class="form-row"><label>选择目标表</label><select id="fi-target">'+App.tables.map(t=>`<option value="${t.id}">${escapeHtml(t.tableName)} (${escapeHtml(t.chineseName||'')})</option>`).join('')+'</select></div>'+
+    '<div class="form-row"><label>字段定义（每行一条，格式：字段名,类型,注释 — 支持 TAB / 逗号 / 空格分隔）</label>'+
+    '<textarea id="fi-text" rows="10" placeholder="patient_id,VARCHAR2(20),患者ID&#10;visit_date,DATE,就诊日期"></textarea></div>'+
+    '<small>同名字段将覆盖；其他原有字段保留</small></div>'
+  ,[
+    {label:'取消',action:c=>c()},
+    {label:'导入',cls:'primary',action:async close=>{
+      const id = $('#fi-target').value;
+      const t = App.tables.find(x=>x.id===id);
+      const lines = $('#fi-text').value.split('\n').map(l=>l.trim()).filter(Boolean);
+      const map = new Map((t.fields||[]).map(f=>[f.name.toLowerCase(),f]));
+      let cnt=0;
+      lines.forEach(line=>{
+        const parts = line.split(/[\t,]/).map(s=>s.trim()).filter(Boolean);
+        if(parts.length<1) return;
+        const f={name:parts[0],type:parts[1]||'',comment:parts.slice(2).join(',')};
+        map.set(f.name.toLowerCase(),f); cnt++;
+      });
+      t.fields = Array.from(map.values());
+      await KB.saveTable(t);
+      await App.loadAll(); renderTableList(); renderTableDetail();
+      close(); toast(`已导入 ${cnt} 个字段`,'success');
+    }}
+  ]);
+}
+
+/* ---------- SQL 资产库 ---------- */
+let sqlFuse = null;
+function rebuildSqlFuse(){
+  sqlFuse = new Fuse(App.sqls, {
+    keys:[{name:'name',weight:2},'sql','description',{name:'tables',weight:1.5},'tags'],
+    threshold:0.4, ignoreLocation:true
+  });
+}
+function getFilteredSqls(){
+  const f=App.filterSql; let arr=App.sqls;
+  if(f.q.trim() && sqlFuse){ arr = sqlFuse.search(f.q.trim()).map(r=>r.item); }
+  if(f.type) arr = arr.filter(s=>s.type===f.type);
+  if(f.status) arr = arr.filter(s=>s.status===f.status);
+  return arr;
+}
+function renderSqlsPane(root){
+  rebuildSqlFuse();
+  root.innerHTML = `
+  <div class="split">
+    <div class="list-col">
+      <div class="list-toolbar">
+        <div class="row">
+          <button class="primary" id="btn-new-sql" style="flex:1">+ 新建 SQL</button>
+        </div>
+        <div class="search-input"><input id="sql-search" placeholder="模糊搜索 名称/SQL/表/标签"></div>
+        <div class="row">
+          <select id="sql-type" style="flex:1"><option value="">全部类型</option>${['查询','统计','存储过程','视图','其他'].map(t=>`<option ${App.filterSql.type===t?'selected':''}>${t}</option>`).join('')}</select>
+          <select id="sql-status" style="flex:1"><option value="">全部状态</option>${[['draft','草稿'],['final','定稿'],['deprecated','废弃']].map(([v,t])=>`<option value="${v}" ${App.filterSql.status===v?'selected':''}>${t}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div class="list-scroller" id="sql-list-scroller"></div>
+    </div>
+    <div class="detail-col" id="sql-detail"></div>
+  </div>`;
+  $('#btn-new-sql').onclick = ()=>openSqlEditor(null);
+  $('#sql-search').oninput = debounce(e=>{App.filterSql.q=e.target.value;renderSqlList();},300);
+  $('#sql-type').onchange = e=>{App.filterSql.type=e.target.value;renderSqlList();};
+  $('#sql-status').onchange = e=>{App.filterSql.status=e.target.value;renderSqlList();};
+  renderSqlList();
+  renderSqlDetail();
+}
+/* 虚拟列表渲染 */
+const VL_ROW_H = 70;
+function renderSqlList(){
+  const scroller = $('#sql-list-scroller'); if(!scroller) return;
+  const arr = getFilteredSqls();
+  if(arr.length===0){
+    scroller.innerHTML = '<div class="empty-state" style="padding:30px"><div class="ico">📝</div>无匹配 SQL</div>';
+    return;
+  }
+  // 创建虚拟容器
+  scroller.innerHTML = `<div class="vl-spacer" id="vl-spacer" style="height:${arr.length*VL_ROW_H}px"></div>`;
+  const spacer = $('#vl-spacer');
+  const draw = ()=>{
+    const top = scroller.scrollTop;
+    const h = scroller.clientHeight;
+    const start = Math.max(0, Math.floor(top/VL_ROW_H)-3);
+    const end = Math.min(arr.length, Math.ceil((top+h)/VL_ROW_H)+3);
+    spacer.innerHTML = '';
+    for(let i=start;i<end;i++){
+      const s=arr[i];
+      const row=document.createElement('div');
+      row.className = 'vl-row list-card '+(s.id===App.selectedSqlId?'active':'');
+      row.style.top = (i*VL_ROW_H)+'px';
+      row.style.height = VL_ROW_H+'px';
+      row.dataset.id = s.id;
+      row.innerHTML = `
+        <div class="title">${escapeHtml(s.name)}</div>
+        <div class="meta">
+          <span class="tag ${s.status==='final'?'green':(s.status==='deprecated'?'red':'amber')}">${s.status||'draft'}</span>
+          <span class="tag">${escapeHtml(s.type||'查询')}</span>
+          <span style="color:var(--text-disabled)">${(s.tables||[]).slice(0,2).join(', ')}${(s.tables||[]).length>2?'...':''}</span>
+        </div>`;
+      row.onclick=()=>{App.selectedSqlId=s.id;renderSqlList();renderSqlDetail();};
+      spacer.appendChild(row);
+    }
+  };
+  scroller.onscroll = draw;
+  draw();
+}
+function renderSqlDetail(){
+  const c=$('#sql-detail'); if(!c) return;
+  const s = App.sqls.find(x=>x.id===App.selectedSqlId);
+  if(!s){ c.innerHTML='<div class="empty-state"><div class="ico">📝</div>选择一条 SQL 查看详情</div>'; return; }
+  c.innerHTML = `
+    <div class="detail-toolbar">
+      <strong>${escapeHtml(s.name)}</strong>
+      <span class="tag ${s.status==='final'?'green':(s.status==='deprecated'?'red':'amber')}">${s.status}</span>
+      <span class="tag">${escapeHtml(s.type)}</span>
+      <div class="spacer" style="flex:1"></div>
+      <button id="btn-copy-sql">复制</button>
+      <button id="btn-edit-sql">编辑</button>
+      <button class="danger" id="btn-del-sql">删除</button>
+    </div>
+    <div class="detail-body">
+      ${s.description?`<p style="color:var(--text-secondary)">${escapeHtml(s.description)}</p>`:''}
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+        ${(s.tables||[]).map(t=>`<span class="tag blue">📁 ${escapeHtml(t)}</span>`).join('')}
+        ${(s.tags||[]).map(t=>`<span class="tag purple">#${escapeHtml(t)}</span>`).join('')}
+      </div>
+      <div class="code-block"><pre><code class="language-sql">${escapeHtml(s.sql||'')}</code></pre></div>
+      <div style="margin-top:10px;color:var(--text-disabled);font-size:11px">创建：${fmtDate(s.createdAt)} · 更新：${fmtDate(s.updatedAt)}</div>
+    </div>`;
+  hljs.highlightAll && hljs.highlightAll();
+  $('#btn-copy-sql').onclick = ()=>{navigator.clipboard.writeText(s.sql||'');toast('已复制','success');};
+  $('#btn-edit-sql').onclick = ()=>openSqlEditor(s);
+  $('#btn-del-sql').onclick = async ()=>{
+    if(!confirm('确认删除该 SQL？')) return;
+    await KB.deleteSql(s.id); App.selectedSqlId=null;
+    await App.loadAll(); renderStats(); rebuildSqlFuse();
+    renderSqlList(); renderSqlDetail();
+    toast('已删除','success');
+  };
+}
+function openSqlEditor(sql){
+  const isNew = !sql;
+  sql = sql || {name:'',type:'查询',status:'draft',sql:'',description:'',tags:[],tables:[]};
+  openModal(isNew?'新建 SQL':'编辑 SQL',`
+    <div class="form-grid">
+      <div class="form-row"><label>名称 *</label><input id="f-name" value="${escapeHtml(sql.name)}"></div>
+      <div class="form-row"><label>类型</label><select id="f-type">${['查询','统计','存储过程','视图','其他'].map(t=>`<option ${sql.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+      <div class="form-row"><label>状态</label><select id="f-status">${[['draft','草稿'],['final','定稿'],['deprecated','废弃']].map(([v,t])=>`<option value="${v}" ${sql.status===v?'selected':''}>${t}</option>`).join('')}</select></div>
+      <div class="form-row"><label>标签（逗号分隔）</label><input id="f-tags" value="${escapeHtml((sql.tags||[]).join(','))}"></div>
+      <div class="form-row full"><label>说明</label><textarea id="f-desc" rows="2">${escapeHtml(sql.description||'')}</textarea></div>
+      <div class="form-row full"><label>SQL 内容 *  <small>保存时会自动提取 FROM/JOIN 表名</small></label>
+        <textarea id="f-sql" rows="14">${escapeHtml(sql.sql||'')}</textarea></div>
+    </div>
+  `,[
+    {label:'取消',action:c=>c()},
+    {label:'保存',cls:'primary',action:async close=>{
+      const name=$('#f-name').value.trim(); const txt=$('#f-sql').value.trim();
+      if(!name) return toast('名称必填','error');
+      if(!txt) return toast('SQL 内容必填','error');
+      const rec=Object.assign({},sql,{
+        name, sql:txt,
+        type:$('#f-type').value, status:$('#f-status').value,
+        description:$('#f-desc').value,
+        tags: $('#f-tags').value.split(/[,\s]+/).map(t=>t.trim()).filter(Boolean)
+      });
+      await KB.saveSql(rec);
+      await App.loadAll(); App.selectedSqlId = rec.id;
+      rebuildSqlFuse(); renderStats(); renderSqlList(); renderSqlDetail();
+      close(); toast('已保存','success');
+    }}
+  ],{lg:true});
+}
+
+/* ---------- AI 写 SQL ---------- */
+function renderChatPane(root){
+  if(!App.chatHistory.length){
+    App.chatHistory = [];
+  }
+  root.innerHTML = `
+  <div class="chat-pane">
+    <div class="context-panel" id="ctx-panel">
+      <div class="context-head" id="ctx-head">
+        <span class="chev">▶</span>
+        <strong>📌 上下文知识注入</strong>
+        <small id="ctx-count" style="color:var(--text-secondary)"></small>
+        <div class="spacer" style="flex:1"></div>
+        <button class="ghost" id="btn-ctx-suggest" title="根据问题智能勾选">💡 推荐</button>
+        <button class="ghost" id="btn-ctx-clear">清空</button>
+      </div>
+      <div class="context-body">
+        <div class="context-section">
+          <h4>表结构 <input id="ctx-tbl-search" placeholder="过滤表名" style="width:160px;display:inline-block;margin-left:8px"></h4>
+          <div class="chk-list" id="ctx-tables"></div>
+        </div>
+        <div class="context-section">
+          <h4>参考 SQL</h4>
+          <div class="chk-list" id="ctx-sqls"></div>
+        </div>
+        <div class="context-section">
+          <h4>系统补充说明（每次都会注入）</h4>
+          <textarea id="ctx-note" rows="2" placeholder="例：默认排除已退费数据 status<>0">${escapeHtml(App.config.defaultSystemNote||'')}</textarea>
+        </div>
+      </div>
+    </div>
+    <div class="chat-stream" id="chat-stream"></div>
+    <div class="chat-input">
+      <textarea id="chat-input" placeholder="例如：写一个查询本月每天门诊收入的 SQL，按科室分组..."></textarea>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <button class="primary" id="btn-send">发送</button>
+        <button id="btn-stop" style="display:none">中止</button>
+        <button class="ghost" id="btn-clear-chat">清空</button>
+      </div>
+    </div>
+  </div>`;
+  // 上下文展开
+  $('#ctx-head').onclick = ()=>$('#ctx-panel').classList.toggle('open');
+  $('#btn-ctx-clear').onclick = ()=>{App.contextSel.tables.clear();App.contextSel.sqls.clear();renderCtxLists();};
+  $('#btn-ctx-suggest').onclick = ()=>suggestContext($('#chat-input').value);
+  $('#ctx-tbl-search').oninput = debounce(()=>renderCtxLists(),200);
+  $('#ctx-note').onchange = async e=>{App.config.defaultSystemNote=e.target.value;await KB.saveConfig({defaultSystemNote:e.target.value});};
+  renderCtxLists();
+  renderChatStream();
+  $('#btn-send').onclick = ()=>sendChat();
+  $('#btn-stop').onclick = ()=>App.abortChat && App.abortChat();
+  $('#btn-clear-chat').onclick = ()=>{App.chatHistory=[];renderChatStream();};
+  $('#chat-input').addEventListener('keydown',e=>{
+    if(e.key==='Enter' && (e.ctrlKey||e.metaKey)){ e.preventDefault(); sendChat(); }
+  });
+}
+function renderCtxLists(){
+  const q = ($('#ctx-tbl-search')?.value||'').trim().toLowerCase();
+  const tbls = App.tables.filter(t=>!q || t.tableName.toLowerCase().includes(q) || (t.chineseName||'').toLowerCase().includes(q));
+  $('#ctx-tables').innerHTML = tbls.map(t=>{
+    const ck=App.contextSel.tables.has(t.id);
+    return `<label class="${ck?'checked':''}"><input type="checkbox" data-id="${t.id}" ${ck?'checked':''}>${escapeHtml(t.tableName)}</label>`;
+  }).join('') || '<small style="color:var(--text-disabled)">无表</small>';
+  $('#ctx-sqls').innerHTML = App.sqls.slice(0,30).map(s=>{
+    const ck=App.contextSel.sqls.has(s.id);
+    return `<label class="${ck?'checked':''}"><input type="checkbox" data-id="${s.id}" ${ck?'checked':''}>${escapeHtml(s.name)}</label>`;
+  }).join('') || '<small style="color:var(--text-disabled)">无 SQL</small>';
+  $$('#ctx-tables input').forEach(c=>c.onchange=e=>{
+    const id=e.target.dataset.id;
+    if(e.target.checked) App.contextSel.tables.add(id); else App.contextSel.tables.delete(id);
+    e.target.parentElement.classList.toggle('checked',e.target.checked);
+    updateCtxCount();
+  });
+  $$('#ctx-sqls input').forEach(c=>c.onchange=e=>{
+    const id=e.target.dataset.id;
+    if(e.target.checked) App.contextSel.sqls.add(id); else App.contextSel.sqls.delete(id);
+    e.target.parentElement.classList.toggle('checked',e.target.checked);
+    updateCtxCount();
+  });
+  updateCtxCount();
+}
+function updateCtxCount(){
+  const el=$('#ctx-count'); if(el) el.textContent=`(已选 ${App.contextSel.tables.size} 表 / ${App.contextSel.sqls.size} SQL)`;
+}
+function suggestContext(question){
+  if(!question.trim()) return toast('请先输入问题','warn');
+  const q = question.toLowerCase();
+  // 简单关键字匹配：表中文名/英文名/分组/字段注释
+  const scored = App.tables.map(t=>{
+    let score=0;
+    if(q.includes((t.tableName||'').toLowerCase())) score+=5;
+    if(t.chineseName && q.includes(t.chineseName.toLowerCase())) score+=4;
+    if(t.group && q.includes(t.group.toLowerCase())) score+=2;
+    (t.fields||[]).forEach(f=>{ if(f.comment && q.includes(f.comment.toLowerCase())) score+=1; });
+    return {t,score};
+  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,5);
+  scored.forEach(x=>App.contextSel.tables.add(x.t.id));
+  $('#ctx-panel').classList.add('open');
+  renderCtxLists();
+  toast(scored.length? `已为你勾选 ${scored.length} 张候选表`:'未找到匹配的表，建议手动勾选', scored.length?'success':'warn');
+}
+function buildSystemPrompt(){
+  let p = "你是资深 Oracle SQL 专家，熟悉医院 HIS 业务（门诊/住院/收费/医嘱/医保/绩效）。\n请严格依据下方提供的表结构编写 SQL，不要自行创造字段。如表结构不足，请明确指出缺失内容。\n\n";
+  if(App.contextSel.tables.size){
+    p += "## 可用的数据库表结构\n";
+    App.contextSel.tables.forEach(id=>{
+      const t = App.tables.find(x=>x.id===id); if(!t) return;
+      p += `### ${t.tableName}（${t.chineseName||'-'}）\n`;
+      if(t.group) p+=`分组：${t.group}\n`;
+      p += `字段列表：\n`;
+      (t.fields||[]).forEach(f=>p+=`- ${f.name}(${f.type||'?'}): ${f.comment||''}\n`);
+      if(t.importantNote) p += `重要说明：${t.importantNote}\n`;
+      if(t.relations) p += `关联：${t.relations}\n`;
+      p += '\n';
+    });
+  }
+  if(App.contextSel.sqls.size){
+    p += "## 参考 SQL（可借鉴写法）\n";
+    App.contextSel.sqls.forEach(id=>{
+      const s = App.sqls.find(x=>x.id===id); if(!s) return;
+      p += `### ${s.name}\n${s.description?s.description+'\n':''}\`\`\`sql\n${s.sql}\n\`\`\`\n\n`;
+    });
+  }
+  if(App.config.defaultSystemNote){
+    p += "## 团队补充约定\n"+App.config.defaultSystemNote+"\n";
+  }
+  return p;
+}
+function renderMarkdown(text){
+  // 极简 markdown 渲染：```code``` 和 `inline`
+  const esc = escapeHtml(text);
+  return esc
+    .replace(/```sql\n([\s\S]*?)```/g,(_,c)=>`<pre><code class="language-sql">${c}</code></pre>`)
+    .replace(/```([\s\S]*?)```/g,(_,c)=>`<pre><code>${c}</code></pre>`)
+    .replace(/`([^`]+?)`/g,(_,c)=>`<code>${c}</code>`);
+}
+function renderChatStream(){
+  const stream = $('#chat-stream'); if(!stream) return;
+  stream.innerHTML = App.chatHistory.length===0
+    ? '<div class="empty-state"><div class="ico">🤖</div>勾选上下文后开始提问<br><small>Ctrl/⌘ + Enter 发送</small></div>'
+    : App.chatHistory.map((m,i)=>`<div class="msg ${m.role}" data-i="${i}">${m.role==='assistant'?renderMarkdown(m.content):escapeHtml(m.content)}</div>`).join('');
+  hljs.highlightAll && hljs.highlightAll();
+  stream.scrollTop = stream.scrollHeight;
+}
+async function sendChat(){
+  const ta = $('#chat-input');
+  const q = ta.value.trim(); if(!q) return;
+  if(!App.config.activeProvider){
+    if(confirm('尚未配置 AI 服务，是否前往设置？')) navigate('settings');
+    return;
+  }
+  ta.value=''; App.chatHistory.push({role:'user',content:q});
+  App.chatHistory.push({role:'assistant',content:''});
+  renderChatStream();
+  $('#btn-send').style.display='none'; $('#btn-stop').style.display='';
+  const ctrl = new AbortController();
+  App.abortChat = ()=>ctrl.abort();
+  try{
+    const sys = buildSystemPrompt();
+    const messages = App.chatHistory.filter(m=>m.role!=='system').slice(0,-1).map(m=>({role:m.role,content:m.content}));
+    await callAI(messages, {
+      systemPrompt: sys,
+      signal: ctrl.signal,
+      onDelta: delta=>{
+        const last = App.chatHistory[App.chatHistory.length-1];
+        last.content += delta;
+        const stream = $('#chat-stream');
+        const lastEl = stream.lastElementChild;
+        if(lastEl) lastEl.innerHTML = renderMarkdown(last.content);
+        stream.scrollTop = stream.scrollHeight;
+      }
+    });
+    renderChatStream();
+  }catch(e){
+    App.chatHistory[App.chatHistory.length-1].content = '⚠️ '+e.message;
+    renderChatStream();
+    toast(e.message,'error',4000);
+  }finally{
+    $('#btn-send').style.display=''; $('#btn-stop').style.display='none';
+    App.abortChat=null;
+  }
+}
+
+/* ---------- 知识库自检 ---------- */
+function staticCheck(){
+  const issues = [];
+  const tableSet = new Map(App.tables.map(t=>[t.tableName.toLowerCase(),t]));
+  // 1. 孤立表 + 幽灵字段
+  for(const s of App.sqls){
+    const usedTables = extractTables(s.sql||'');
+    for(const tn of usedTables){
+      if(!tableSet.has(tn)){
+        issues.push({level:'warn',cat:'孤立表引用',obj:`SQL: ${s.name}`,msg:`引用了未维护的表 ${tn}`,sqlId:s.id});
+      }
+    }
+    // 幽灵字段：非常粗略，提取 SELECT 字段并和已知表的字段比对
+    const fieldRe = /\bselect\b([\s\S]+?)\bfrom\b/i;
+    const m = (s.sql||'').match(fieldRe);
+    if(m){
+      const segment = m[1];
+      if(!segment.includes('*')){
+        const tokens = segment.split(',').map(p=>p.trim().replace(/\s+as\s+\w+/i,'').replace(/^[\w]+\./,'')).filter(t=>/^[a-zA-Z_]\w*$/.test(t));
+        const knownFields = new Set();
+        usedTables.forEach(tn=>{
+          const t = tableSet.get(tn);
+          (t?.fields||[]).forEach(f=>knownFields.add(f.name.toLowerCase()));
+        });
+        if(knownFields.size>0){
+          tokens.forEach(t=>{
+            if(!knownFields.has(t.toLowerCase())){
+              issues.push({level:'error',cat:'幽灵字段',obj:`SQL: ${s.name}`,msg:`字段 ${t} 未在已知表结构中找到`,sqlId:s.id});
+            }
+          });
+        }
+      }
+    }
+    if(!s.description) issues.push({level:'info',cat:'缺失说明',obj:`SQL: ${s.name}`,msg:'未填写业务说明，影响 AI 准确率',sqlId:s.id});
+  }
+  // 2. 表过期 / 缺字段
+  for(const t of App.tables){
+    if(daysAgo(t.updatedAt)>90){
+      issues.push({level:'info',cat:'过期知识',obj:`表: ${t.tableName}`,msg:`已 ${daysAgo(t.updatedAt)} 天未更新，建议核实`,tableId:t.id});
+    }
+    if((t.fields||[]).length===0){
+      issues.push({level:'warn',cat:'缺失字段',obj:`表: ${t.tableName}`,msg:'未维护字段列表',tableId:t.id});
+    }
+    if(!t.importantNote) issues.push({level:'info',cat:'缺失说明',obj:`表: ${t.tableName}`,msg:'未填写重要枚举说明',tableId:t.id});
+  }
+  return issues;
+}
+function renderCheckPane(root){
+  const issues = staticCheck();
+  const counts = {error:0,warn:0,info:0};
+  issues.forEach(i=>counts[i.level]++);
+  const groupBy = {};
+  issues.forEach(i=>{(groupBy[i.cat]=groupBy[i.cat]||[]).push(i);});
+  root.innerHTML = `
+    <div class="detail-body">
+      <div class="check-grid">
+        <div class="check-card red"><div class="label">🔴 高危</div><div class="num">${counts.error}</div></div>
+        <div class="check-card amber"><div class="label">🟡 警告</div><div class="num">${counts.warn}</div></div>
+        <div class="check-card blue"><div class="label">🔵 提示</div><div class="num">${counts.info}</div></div>
+        <div class="check-card green"><div class="label">检查总数</div><div class="num">${App.tables.length+App.sqls.length}</div></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button class="primary" id="btn-ai-check">🧠 AI 深度诊断（取标红/标黄项）</button>
+        <button id="btn-rerun">重新扫描</button>
+      </div>
+      <div id="ai-check-out"></div>
+      ${Object.keys(groupBy).map(cat=>`
+        <h3 style="margin:18px 0 8px;font-size:14px">${escapeHtml(cat)} <small>(${groupBy[cat].length})</small></h3>
+        <div class="issue-list">
+          ${groupBy[cat].map(i=>`
+            <div class="issue" data-sql="${i.sqlId||''}" data-tbl="${i.tableId||''}" style="cursor:pointer">
+              <span class="lvl">${i.level==='error'?'🔴':i.level==='warn'?'🟡':'🔵'}</span>
+              <div class="msg-text">${escapeHtml(i.msg)}<div class="obj">${escapeHtml(i.obj)}</div></div>
+            </div>`).join('')}
+        </div>`).join('') || '<div class="empty-state"><div class="ico">✅</div>未发现问题，知识库健康</div>'}
+    </div>`;
+  $('#btn-rerun').onclick = ()=>renderCheckPane(root);
+  $$('.issue[data-sql],.issue[data-tbl]',root).forEach(el=>el.onclick=()=>{
+    if(el.dataset.sql){App.selectedSqlId=el.dataset.sql;navigate('sqls');}
+    else if(el.dataset.tbl){App.selectedTableId=el.dataset.tbl;navigate('tables');}
+  });
+  $('#btn-ai-check').onclick = ()=>aiDeepCheck(issues);
+}
+async function aiDeepCheck(issues){
+  if(!App.config.activeProvider){ if(confirm('尚未配置 AI，是否前往设置？')) navigate('settings'); return; }
+  const sample = issues.filter(i=>i.level!=='info').slice(0,12);
+  if(!sample.length) return toast('当前没有需要 AI 复核的标红/标黄项','info');
+  const out = $('#ai-check-out');
+  out.innerHTML = '<div class="msg assistant"><span class="dot-loader"></span> AI 正在分析...</div>';
+  // 收集涉及的 SQL + 表
+  const sqlIds = new Set(sample.map(i=>i.sqlId).filter(Boolean));
+  const tblIds = new Set(sample.map(i=>i.tableId).filter(Boolean));
+  let payload = '## 静态分析告警\n'+sample.map(i=>`- [${i.level}] ${i.cat}: ${i.msg} (${i.obj})`).join('\n')+'\n\n';
+  if(sqlIds.size){
+    payload += '## 涉及 SQL\n';
+    sqlIds.forEach(id=>{
+      const s = App.sqls.find(x=>x.id===id); if(!s) return;
+      payload += `### ${s.name}\n\`\`\`sql\n${s.sql}\n\`\`\`\n\n`;
+    });
+  }
+  if(tblIds.size){
+    payload += '## 涉及表结构\n';
+    tblIds.forEach(id=>{
+      const t = App.tables.find(x=>x.id===id); if(!t) return;
+      payload += `### ${t.tableName}\n字段：${(t.fields||[]).map(f=>f.name).join(', ')||'(空)'}\n\n`;
+    });
+  }
+  const sys = "你是资深 Oracle DBA，正在审计医院 HIS 知识库。请逐条分析告警，从以下三个维度给出结论：\n1. 逻辑错误（如大小写敏感、隐式类型转换）\n2. 性能风险（如缺失连接条件、全表扫描）\n3. 业务矛盾（如门诊表查出住院数据）\n请用 Markdown 输出，并对每条问题给出修复建议。";
+  try{
+    out.querySelector('.msg').textContent='';
+    await callAI([{role:'user',content:payload}],{systemPrompt:sys,onDelta:d=>{
+      const m = out.querySelector('.msg');
+      m.textContent += d;
+    }});
+    const m = out.querySelector('.msg');
+    m.innerHTML = renderMarkdown(m.textContent);
+    hljs.highlightAll && hljs.highlightAll();
+  }catch(e){ out.innerHTML='<div class="msg assistant">⚠️ '+escapeHtml(e.message)+'</div>'; }
+}
+
+/* ---------- 设置 ---------- */
+const PRESETS = [
+  {name:'Anthropic Claude', type:'anthropic', apiUrl:'https://api.anthropic.com/v1/messages', modelId:'claude-3-5-sonnet-20241022'},
+  {name:'OpenAI', type:'openai_compat', apiUrl:'https://api.openai.com/v1/chat/completions', modelId:'gpt-4o-mini'},
+  {name:'DeepSeek', type:'openai_compat', apiUrl:'https://api.deepseek.com/v1/chat/completions', modelId:'deepseek-chat'},
+  {name:'Moonshot Kimi', type:'openai_compat', apiUrl:'https://api.moonshot.cn/v1/chat/completions', modelId:'moonshot-v1-8k'},
+  {name:'通义千问', type:'openai_compat', apiUrl:'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', modelId:'qwen-plus'},
+];
+function renderSettingsPane(root){
+  const cfg = App.config;
+  root.innerHTML = `
+    <div class="detail-body" style="max-width:780px">
+      <h2 style="margin:0 0 16px;font-size:18px">⚙️ 设置</h2>
+      <h3 style="font-size:14px;color:var(--text-secondary);margin:18px 0 8px">AI 服务</h3>
+      <div class="form-row">
+        <label>当前激活的服务</label>
+        <select id="cfg-active">
+          <option value="">-- 未选择 --</option>
+          ${Object.keys(cfg.providers).map(k=>`<option value="${k}" ${cfg.activeProvider===k?'selected':''}>${escapeHtml(k)} (${escapeHtml(cfg.providers[k].type)})</option>`).join('')}
+        </select>
+      </div>
+      <table class="fields-table" style="margin-top:8px">
+        <thead><tr><th>名称</th><th>类型</th><th>模型</th><th>API Key</th><th style="width:120px"></th></tr></thead>
+        <tbody>
+          ${Object.entries(cfg.providers).map(([k,p])=>`
+            <tr data-key="${escapeHtml(k)}"><td>${escapeHtml(k)}</td><td>${escapeHtml(p.type)}</td>
+            <td>${escapeHtml(p.modelId)}</td><td>${maskKey(p.apiKey)}</td>
+            <td><button class="ghost btn-edit-prov">编辑</button> <button class="ghost btn-del-prov">删除</button></td></tr>
+          `).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-disabled);padding:14px">尚未配置</td></tr>'}
+        </tbody>
+      </table>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        ${PRESETS.map((p,i)=>`<button class="btn-add-preset" data-i="${i}">+ ${p.name}</button>`).join('')}
+        <button class="btn-add-preset" data-i="-1">+ 自定义</button>
+      </div>
+
+      <h3 style="font-size:14px;color:var(--text-secondary);margin:24px 0 8px">默认系统提示</h3>
+      <div class="form-row"><textarea id="cfg-note" rows="3" placeholder="所有 AI 对话都会注入这段说明...">${escapeHtml(cfg.defaultSystemNote||'')}</textarea></div>
+
+      <h3 style="font-size:14px;color:var(--text-secondary);margin:24px 0 8px">数据维护</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button id="cfg-export">📥 导出全量 JSON</button>
+        <button id="cfg-import">📤 导入 JSON</button>
+        <button class="danger" id="cfg-clear">⚠️ 清空所有数据</button>
+      </div>
+      <p><small>数据库：IndexedDB · ${cfg.activeProvider?('当前 AI: '+escapeHtml(cfg.activeProvider)):'未配置 AI'} · 协议：${location.protocol}</small></p>
+    </div>`;
+  $('#cfg-active').onchange = async e=>{App.config.activeProvider=e.target.value;await KB.saveConfig({activeProvider:e.target.value});toast('已切换','success');};
+  $('#cfg-note').onchange = async e=>{App.config.defaultSystemNote=e.target.value;await KB.saveConfig({defaultSystemNote:e.target.value});toast('已保存','success');};
+  $$('.btn-add-preset',root).forEach(b=>b.onclick=()=>openProviderEditor(null,Number(b.dataset.i)));
+  $$('.btn-edit-prov',root).forEach(b=>b.onclick=e=>openProviderEditor(e.target.closest('tr').dataset.key,null));
+  $$('.btn-del-prov',root).forEach(b=>b.onclick=async e=>{
+    const k = e.target.closest('tr').dataset.key;
+    if(!confirm(`删除服务「${k}」？`)) return;
+    delete App.config.providers[k];
+    if(App.config.activeProvider===k) App.config.activeProvider='';
+    await KB.saveConfig({providers:App.config.providers,activeProvider:App.config.activeProvider});
+    renderSettingsPane(root);
+  });
+  $('#cfg-export').onclick = exportAll;
+  $('#cfg-import').onclick = importAll;
+  $('#cfg-clear').onclick = async ()=>{
+    if(!confirm('确认清空所有表结构、SQL 和配置？此操作不可恢复！')) return;
+    if(prompt('请输入 DELETE 以确认')!=='DELETE') return;
+    indexedDB.deleteDatabase(KB.DB_NAME);
+    localStorage.clear();
+    toast('数据已清空，将自动刷新','warn',1500);
+    setTimeout(()=>location.reload(),1500);
+  };
+}
+function openProviderEditor(key,presetIdx){
+  const cfg = App.config;
+  let p;
+  if(key){ p = Object.assign({},cfg.providers[key],{__name:key}); }
+  else if(presetIdx>=0){ const ps=PRESETS[presetIdx]; p={__name:ps.name,type:ps.type,apiUrl:ps.apiUrl,modelId:ps.modelId,apiKey:'',timeout:60000,maxTokens:4096,temperature:0.3}; }
+  else{ p={__name:'',type:'openai_compat',apiUrl:'',modelId:'',apiKey:'',timeout:60000,maxTokens:4096,temperature:0.3}; }
+  openModal((key?'编辑':'添加')+' AI 服务',`
+    <div class="form-grid">
+      <div class="form-row"><label>名称（唯一）*</label><input id="p-name" value="${escapeHtml(p.__name)}" ${key?'readonly':''}></div>
+      <div class="form-row"><label>类型 *</label><select id="p-type">
+        <option value="anthropic" ${p.type==='anthropic'?'selected':''}>Anthropic</option>
+        <option value="openai_compat" ${p.type==='openai_compat'?'selected':''}>OpenAI 兼容</option>
+      </select></div>
+      <div class="form-row full"><label>API URL *</label><input id="p-url" value="${escapeHtml(p.apiUrl)}"></div>
+      <div class="form-row"><label>模型 ID *</label><input id="p-model" value="${escapeHtml(p.modelId)}"></div>
+      <div class="form-row"><label>API Key *</label><input id="p-key" type="password" value="${escapeHtml(p.apiKey)}"></div>
+      <div class="form-row"><label>超时 (ms)</label><input id="p-timeout" type="number" value="${p.timeout||60000}"></div>
+      <div class="form-row"><label>max_tokens</label><input id="p-mt" type="number" value="${p.maxTokens||4096}"></div>
+      <div class="form-row"><label>temperature</label><input id="p-temp" type="number" step="0.1" value="${p.temperature??0.3}"></div>
+    </div>
+    <small>提示：浏览器 file:// 协议下密钥仅本地保存。Anthropic 浏览器直连需带 anthropic-dangerous-direct-browser-access 头（已自动添加）。</small>
+  `,[
+    {label:'测试连接',action:async _=>{
+      const tmp = collectProvider();
+      try{
+        toast('测试中...','info',1500);
+        const orig = JSON.parse(JSON.stringify(App.config));
+        App.config.providers['__test__'] = tmp; App.config.activeProvider='__test__';
+        const r = await callAI([{role:'user',content:'ping'}]);
+        App.config = orig;
+        toast('连接成功','success');
+      }catch(e){ toast('失败: '+e.message,'error',4000); }
+    }},
+    {label:'取消',action:c=>c()},
+    {label:'保存',cls:'primary',action:async close=>{
+      const v = collectProvider();
+      const name = $('#p-name').value.trim();
+      if(!name||!v.apiUrl||!v.modelId||!v.apiKey) return toast('带 * 的字段必填','error');
+      App.config.providers[name] = v;
+      if(!App.config.activeProvider) App.config.activeProvider=name;
+      await KB.saveConfig({providers:App.config.providers,activeProvider:App.config.activeProvider});
+      close(); renderSettingsPane($('.pane.active')); toast('已保存','success');
+    }}
+  ],{lg:true});
+  function collectProvider(){
+    return {
+      type:$('#p-type').value, apiUrl:$('#p-url').value.trim(),
+      modelId:$('#p-model').value.trim(), apiKey:$('#p-key').value,
+      timeout:Number($('#p-timeout').value)||60000,
+      maxTokens:Number($('#p-mt').value)||4096,
+      temperature:parseFloat($('#p-temp').value)
+    };
+  }
+}
+
+/* ---------- 导入导出 ---------- */
+async function exportAll(){
+  const blob = new Blob([JSON.stringify({
+    version:'1.1', exportedAt:new Date().toISOString(),
+    tables:App.tables, sqls:App.sqls, config:App.config
+  },null,2)],{type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download = `his_sql_kb_${new Date().toISOString().slice(0,10)}.json`;
+  a.click(); URL.revokeObjectURL(url);
+  toast('已导出','success');
+}
+async function importAll(){
+  const inp = document.createElement('input'); inp.type='file'; inp.accept='application/json';
+  inp.onchange = async ()=>{
+    const f = inp.files[0]; if(!f) return;
+    try{
+      const data = JSON.parse(await f.text());
+      if(!confirm(`将导入 ${data.tables?.length||0} 张表 / ${data.sqls?.length||0} 条 SQL，是否继续？`)) return;
+      for(const t of (data.tables||[])) await KB.saveTable(t);
+      for(const s of (data.sqls||[])) await KB.saveSql(s);
+      if(data.config) await KB.saveConfig(data.config);
+      await App.loadAll(); renderStats(); renderWorkspace();
+      toast('导入成功','success');
+    }catch(e){ toast('导入失败: '+e.message,'error',4000); }
+  };
+  inp.click();
+}
+
+/* ---------- Modal ---------- */
+function openModal(title, bodyHtml, actions, opts={}){
+  const root = $('#modal-root');
+  const mask = document.createElement('div');
+  mask.className='modal-mask';
+  mask.innerHTML = `<div class="modal ${opts.lg?'lg':''}">
+    <div class="modal-head"><h3>${escapeHtml(title)}</h3><button class="ghost" id="m-close">×</button></div>
+    <div class="modal-body">${bodyHtml}</div>
+    <div class="modal-foot"></div>
+  </div>`;
+  root.appendChild(mask);
+  const close = ()=>mask.remove();
+  $('#m-close',mask).onclick=close;
+  mask.onclick = e=>{ if(e.target===mask) close(); };
+  const foot = $('.modal-foot',mask);
+  (actions||[]).forEach(a=>{
+    const b=document.createElement('button');
+    b.textContent=a.label; if(a.cls) b.className=a.cls;
+    b.onclick=()=>a.action(close);
+    foot.appendChild(b);
+  });
+  return {close};
+}
+
+/* ============================================================
+ * 5. 启动
+ * ============================================================ */
+(async function boot(){
+  try{
+    await KB.init();
+    const migrated = await KB.migrateFromLocalStorage();
+    if(migrated) toast('检测到旧版数据，已自动升级到 IndexedDB','success',4000);
+    await App.loadAll();
+    rebuildSqlFuse();
+    if(location.protocol!=='file:') $('#protocol-warn').style.display='block';
+    hljs.registerLanguage && hljs.registerLanguage('sql', window.hljsSqlLang||window.hljs?.getLanguage?.('sql'));
+    renderNav(); renderStats(); navigate('dashboard');
+    $('#btn-toggle-sidebar').onclick = ()=>$('#sidebar').classList.toggle('collapsed');
+    $('#btn-export').onclick = exportAll;
+    $('#btn-import').onclick = importAll;
+  }catch(e){
+    document.body.innerHTML='<div style="padding:40px;color:#ef4444">启动失败：'+escapeHtml(e.message)+'</div>';
+    console.error(e);
+  }
+})();
+</script>
+</body>
+</html>
