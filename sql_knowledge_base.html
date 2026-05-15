@@ -525,6 +525,7 @@ function renderTablesPane(root){
         <div class="row">
           <button class="primary" id="btn-new-table" style="flex:1">+ 新建表</button>
           <button id="btn-import-fields" title="批量导入字段">⬆ 字段</button>
+          <button id="btn-import-dict" title="从Oracle数据字典结果导入">📋 字典</button>
         </div>
         <div class="search-input"><input id="tbl-search" placeholder="搜索表名/中文名/分组"></div>
       </div>
@@ -534,6 +535,7 @@ function renderTablesPane(root){
   </div>`;
   $('#btn-new-table').onclick = ()=>openTableEditor(null);
   $('#btn-import-fields').onclick = openFieldsImporter;
+  $('#btn-import-dict').onclick = openDictImporter;
   $('#tbl-search').oninput = debounce(e=>{App.filterTable.q=e.target.value;renderTableList();},250);
   renderTableList();
   renderTableDetail();
@@ -683,6 +685,61 @@ function openFieldsImporter(){
       close(); toast(`已导入 ${cnt} 个字段`,'success');
     }}
   ]);
+}
+
+function openDictImporter(){
+  openModal('从 Oracle 数据字典结果导入','<div>'+
+    '<div class="form-row"><label>表名 *</label><input id="di-table" placeholder="如：t_His_Incomedetail"></div>'+
+    '<div class="form-row"><label>中文名称</label><input id="di-cname" placeholder="如：收入明细表"></div>'+
+    '<div class="form-row"><label>分组</label><input id="di-group" placeholder="如：HIS收入"></div>'+
+    '<div class="form-row full"><label>粘贴 user_tab_columns 查询结果（支持 TAB/逗号/竖线分隔，列顺序：字段名、类型、注释）</label>'+
+    '<textarea id="di-fields" rows="8" placeholder="PATIENT_ID\tVARCHAR2(20)\t患者ID\nVISIT_DATE\tDATE\t就诊日期\nAMOUNT\tNUMBER(12,2)\t金额"></textarea></div>'+
+    '<div class="form-row full"><label>粘贴外键约束结果（可选，格式：约束名、本表字段、父表、父表字段）</label>'+
+    '<textarea id="di-fk" rows="4" placeholder="FK_INCOME_PATIENT\tPATIENT_ID\tt_His_Patient\tPATIENT_ID"></textarea></div>'+
+    '<div class="form-row full"><label>粘贴触发器信息（可选，格式：触发器名、类型(BEFORE/AFTER)、事件(INSERT/UPDATE/DELETE)、说明）</label>'+
+    '<textarea id="di-trigger" rows="3" placeholder="TR_INCOME_SEQ\tBEFORE\tINSERT\t自动生成流水号"></textarea></div>'+
+    '<div class="form-row full"><label>重要枚举值/业务说明（可选）</label>'+
+    '<textarea id="di-notes" rows="2" placeholder="如：status=1正常 0已退费 -1作废；type=1门诊 2住院"></textarea></div>'+
+    '</div>'
+  ,[
+    {label:'取消',action:c=>c()},
+    {label:'导入并保存',cls:'primary',action:async close=>{
+      const tableName = $('#di-table').value.trim();
+      if(!tableName) return toast('表名必填','error');
+      // 解析字段
+      const fields = $('#di-fields').value.split('\\n').map(l=>l.trim()).filter(Boolean).map(line=>{
+        const parts = line.split(/[\\t|,]/).map(s=>s.trim()).filter(Boolean);
+        return {name:parts[0]||'',type:parts[1]||'',comment:parts.slice(2).join(',')};
+      }).filter(f=>f.name);
+      // 解析外键
+      const fkLines = $('#di-fk').value.split('\\n').map(l=>l.trim()).filter(Boolean);
+      const relations = fkLines.map(line=>{
+        const p = line.split(/[\\t|,]/).map(s=>s.trim());
+        return `${p[0]||''}: ${p[1]||''} → ${p[2]||''}.${p[3]||''}`;
+      }).join('；');
+      // 解析触发器
+      const trLines = $('#di-trigger').value.split('\\n').map(l=>l.trim()).filter(Boolean);
+      const triggerNote = trLines.map(line=>{
+        const p = line.split(/[\\t|,]/).map(s=>s.trim());
+        return `[${p[1]||''} ${p[2]||''}] ${p[0]||''}: ${p[3]||''}`;
+      }).join('\\n');
+      // 组装
+      const importantNote = [$('#di-notes').value.trim(), triggerNote?('触发器：\\n'+triggerNote):''].filter(Boolean).join('\\n\\n');
+      const existing = App.tables.find(t=>t.tableName.toLowerCase()===tableName.toLowerCase());
+      const rec = Object.assign(existing||{},{
+        tableName,
+        chineseName: $('#di-cname').value.trim() || (existing?.chineseName||''),
+        group: $('#di-group').value.trim() || (existing?.group||''),
+        fields,
+        relations: relations || (existing?.relations||''),
+        importantNote: importantNote || (existing?.importantNote||'')
+      });
+      await KB.saveTable(rec);
+      await App.loadAll(); App.selectedTableId=rec.id;
+      renderStats(); renderTableList(); renderTableDetail();
+      close(); toast(`已导入表 ${tableName}（${fields.length} 字段）`,'success');
+    }}
+  ],{lg:true});
 }
 
 /* ---------- SQL 资产库 ---------- */
@@ -868,6 +925,11 @@ function renderChatPane(root){
       </div>
     </div>
     <div class="chat-stream" id="chat-stream"></div>
+    <div style="padding:4px 14px;border-top:1px solid var(--border-default);display:flex;gap:6px;flex-wrap:wrap;background:var(--bg-surface)">
+      <button class="ghost" id="btn-tpl-explore" style="font-size:11px;padding:3px 8px" title="生成查询Oracle数据字典的SQL，获取表结构/外键/触发器">🔍 探查表结构</button>
+      <button class="ghost" id="btn-tpl-parse" style="font-size:11px;padding:3px 8px" title="粘贴查询结果，AI帮你整理成标准表结构">📋 解析查询结果</button>
+      <button class="ghost" id="btn-tpl-fk" style="font-size:11px;padding:3px 8px" title="查询指定表的外键约束和触发器">🔗 查外键/触发器</button>
+    </div>
     <div class="chat-input">
       <textarea id="chat-input" placeholder="例如：写一个查询本月每天门诊收入的 SQL，按科室分组..."></textarea>
       <div style="display:flex;flex-direction:column;gap:6px">
@@ -888,6 +950,18 @@ function renderChatPane(root){
   $('#btn-send').onclick = ()=>sendChat();
   $('#btn-stop').onclick = ()=>App.abortChat && App.abortChat();
   $('#btn-clear-chat').onclick = ()=>{App.chatHistory=[];renderChatStream();};
+  $('#btn-tpl-explore').onclick = ()=>{
+    $('#chat-input').value = '我需要了解以下表的完整结构，请帮我生成 Oracle 数据字典查询 SQL（需包含字段名、类型、长度、注释、是否可空），同时也查出该表的外键约束、索引和触发器信息。\n\n目标表名：';
+    $('#chat-input').focus();
+  };
+  $('#btn-tpl-parse').onclick = ()=>{
+    $('#chat-input').value = '以下是我从 Oracle 数据字典查询出的结果，请帮我整理成标准格式（每行一个字段，格式：字段名,类型,注释），并列出外键关系和触发器说明。如有枚举值类型字段请特别标注。\n\n查询结果如下：\n';
+    $('#chat-input').focus();
+  };
+  $('#btn-tpl-fk').onclick = ()=>{
+    $('#chat-input').value = '请生成查询以下表的外键约束（FK）、唯一约束（UK）、检查约束（CK）和触发器（Trigger）的 Oracle SQL。我需要知道约束名、关联的父表和字段、触发器的类型和触发时机。\n\n目标表名：';
+    $('#chat-input').focus();
+  };
   $('#chat-input').addEventListener('keydown',e=>{
     if(e.key==='Enter' && (e.ctrlKey||e.metaKey)){ e.preventDefault(); sendChat(); }
   });
